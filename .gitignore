@@ -1,0 +1,15 @@
+.DS_Store
+**/.DS_Store
+
+# Local medical/model data should not be committed by default.
+data/
+!data/.gitkeep
+
+# Runtime and editor artifacts.
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+*.log

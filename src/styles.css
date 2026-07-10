@@ -1,0 +1,305 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0f1419;
+  color: #e7ecef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto 1fr minmax(150px, 24vh);
+  background: #0f1419;
+}
+
+.topbar,
+.series-band,
+.debug-band {
+  border-bottom: 1px solid #2a333d;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 22px;
+  align-items: center;
+  background: #141b22;
+}
+
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+p {
+  margin: 5px 0 0;
+  color: #aeb8c2;
+}
+
+.file-actions,
+.control-row,
+.presets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.file-button,
+button,
+select {
+  border: 1px solid #44515f;
+  background: #23303a;
+  color: #f7fafc;
+  padding: 8px 11px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.file-button input {
+  display: none;
+}
+
+button:hover,
+.file-button:hover,
+select:hover {
+  background: #2f3e4a;
+}
+
+button.is-active,
+button[aria-pressed="true"] {
+  border-color: #f59e0b;
+  background: #5a3b10;
+  color: #fff7ed;
+}
+
+.series-band {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(3, 1fr);
+  gap: 1px;
+  background: #2a333d;
+}
+
+.series-band div {
+  background: #151c23;
+  padding: 11px 16px;
+  min-width: 0;
+}
+
+.series-band span {
+  display: block;
+  color: #95a3af;
+  font-size: 12px;
+}
+
+.series-band strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 3px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  min-height: 0;
+}
+
+.viewer-pane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  background: #0b0f13;
+}
+
+.three-pane,
+.mpr-pane {
+  min-width: 0;
+  min-height: 360px;
+  display: grid;
+  place-items: stretch;
+}
+
+.three-viewport {
+  position: relative;
+  min-height: 360px;
+  background: #101820;
+  border: 1px solid #2a333d;
+  overflow: hidden;
+}
+
+.three-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #aeb8c2;
+  padding: 16px;
+  text-align: center;
+}
+
+.three-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mpr-pane {
+  place-items: center;
+}
+
+#mprCanvas {
+  max-width: 100%;
+  max-height: calc(100vh - 285px);
+  width: min(58vh, 100%);
+  height: auto;
+  image-rendering: pixelated;
+  background: #000;
+  border: 1px solid #2a333d;
+}
+
+.controls-pane {
+  padding: 14px;
+  overflow: auto;
+  border-left: 1px solid #2a333d;
+  background: #151c23;
+}
+
+fieldset {
+  border: 1px solid #33404a;
+  border-radius: 6px;
+  margin: 0 0 12px;
+  padding: 10px;
+}
+
+legend {
+  padding: 0 5px;
+  color: #d8dee4;
+  font-weight: 700;
+}
+
+label {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+  color: #cbd5dd;
+}
+
+.checkbox-label {
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.checkbox-label input {
+  width: auto;
+}
+
+.vector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.vector-grid label,
+.axis-grid label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  margin: 0;
+}
+
+.axis-grid {
+  display: grid;
+  grid-template-columns: 42px repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.axis-grid span {
+  color: #cbd5dd;
+  font-weight: 700;
+}
+
+input,
+select {
+  width: 100%;
+  min-width: 0;
+}
+
+input {
+  border: 1px solid #44515f;
+  border-radius: 5px;
+  background: #0f1419;
+  color: #f8fafc;
+  padding: 7px 8px;
+}
+
+.debug-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+  background: #0f1419;
+}
+
+pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 1.45;
+  color: #d6dee6;
+}
+
+#debugInfo {
+  border-right: 1px solid #2a333d;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-rows: auto auto auto auto;
+  }
+
+  .topbar,
+  .workspace,
+  .debug-band,
+  .series-band {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    align-items: stretch;
+  }
+
+  .controls-pane {
+    border-left: 0;
+    border-top: 1px solid #2a333d;
+  }
+
+  canvas {
+    max-height: 60vh;
+  }
+
+  .viewer-pane {
+    grid-template-columns: 1fr;
+  }
+}
