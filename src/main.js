@@ -550,7 +550,12 @@ async function initThree() {
 function installScheduler() {
   state.scheduler = new MprUpdateScheduler((reason) => {
     if (!state.volume || !state.dynamicController) return;
-    state.dynamicController.update(state.volume, reason);
+    if (shouldUseObjectMpr()) {
+      const objInput = state.threeScene.getObjCameraInput(readFloat(els.objMprDistance, 500));
+      state.dynamicController.updateFromThreeInput(state.volume, objInput, reason);
+    } else {
+      state.dynamicController.update(state.volume, reason);
+    }
   }, { minUpdateIntervalMs: readFloat(els.updateInterval, viewerConfig.dynamicMpr.minUpdateIntervalMs) });
 }
 

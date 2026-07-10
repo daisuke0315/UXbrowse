@@ -327,6 +327,29 @@ export class ThreeSceneManager {
     return this.summarizeObject(this.objModel);
   }
 
+  getObjCameraInput(distance = 500) {
+    if (!this.objModel) return null;
+    const THREE = this.THREE;
+    this.objModel.updateMatrixWorld(true);
+    this.camera.updateMatrixWorld();
+    const box = new THREE.Box3().setFromObject(this.objModel);
+    const target = new THREE.Vector3();
+    const eye = new THREE.Vector3();
+    const n = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize();
+    box.getCenter(target);
+    eye.copy(target).addScaledVector(n, -Math.max(0.001, distance));
+    return {
+      eye: [eye.x, eye.y, eye.z],
+      target: [target.x, target.y, target.z],
+      up: [up.x, up.y, up.z],
+      n: [n.x, n.y, n.z],
+      distance,
+      orbitDistance: this.camera.position.distanceTo(this.controls.target),
+      targetMode: "model-center-camera-facing",
+    };
+  }
+
   clearObjModel() {
     if (!this.objModel) return;
     const sourceFormat = this.objModel.userData.sourceFormat || "3D";
