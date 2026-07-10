@@ -41,10 +41,58 @@ select {
   background: #141b22;
 }
 
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 220px;
+}
+
+.brand-mark {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 8px 18px rgb(0 0 0 / 0.32));
+}
+
+.brand-volume {
+  fill: #101820;
+  stroke: #6b7c89;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.brand-plane {
+  fill: url("#brandPlaneGradient");
+  fill-opacity: 0.9;
+  stroke: #e7ecef;
+  stroke-opacity: 0.68;
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+}
+
+.brand-orbit {
+  fill: none;
+  stroke: #9fb3c3;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.brand-orbit-lower {
+  stroke-opacity: 0.44;
+}
+
+.brand-focus {
+  fill: #f8fafc;
+  stroke: #0f1419;
+  stroke-width: 1.2;
+}
+
 h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
+  line-height: 1.05;
 }
 
 p {

@@ -3,15 +3,33 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Three.js連動・注視点ベース動的MPRブラウザ</title>
+    <title>ViewSync MPR</title>
     <link rel="stylesheet" href="./src/styles.css">
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <div>
-          <h1>Three.js連動・注視点ベース動的MPRブラウザ</h1>
-          <p id="statusText">DICOM CTシリーズを選択してください。</p>
+        <div class="brand-lockup" aria-label="ViewSync MPR">
+          <svg class="brand-mark" viewBox="0 0 48 48" role="img" aria-labelledby="brandTitle brandDesc">
+            <title id="brandTitle">ViewSync MPR</title>
+            <desc id="brandDesc">A synchronized viewing plane crossing a three-dimensional volume.</desc>
+            <defs>
+              <linearGradient id="brandPlaneGradient" x1="8" y1="8" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#38bdf8"/>
+                <stop offset="0.55" stop-color="#22c55e"/>
+                <stop offset="1" stop-color="#f59e0b"/>
+              </linearGradient>
+            </defs>
+            <path class="brand-volume" d="M24 4.5 40.5 14v20L24 43.5 7.5 34V14L24 4.5Z"/>
+            <path class="brand-plane" d="M10.5 27.2 24 19.3l13.5 7.9L24 35.1 10.5 27.2Z"/>
+            <path class="brand-orbit" d="M9.5 18.5c5.2-8.3 21.3-8.3 29 0"/>
+            <path class="brand-orbit brand-orbit-lower" d="M38.5 29.5c-5.2 8.3-21.3 8.3-29 0"/>
+            <circle class="brand-focus" cx="24" cy="27.2" r="3.2"/>
+          </svg>
+          <div>
+            <h1>ViewSync MPR</h1>
+            <p id="statusText">DICOM CTシリーズを選択してください。</p>
+          </div>
         </div>
         <div class="file-actions">
           <button id="demoVolumeBtn" type="button">デモファントム</button>

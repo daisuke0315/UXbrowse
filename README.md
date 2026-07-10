@@ -1,4 +1,6 @@
-# Three.js連動・注視点ベース動的MPRブラウザ
+# ViewSync MPR
+
+外観モデル連動MPRビューア
 
 ブラウザ内だけで非圧縮CT DICOMシリーズ又は単一`.mha`ボリュームを読み込み、`eye`、`target`、`up` から任意断面MPRを生成する試作です。Three.jsのカメラ、OrbitControls、注視点、読み込んだ3DモデルにMPRを連動させます。外部サーバー送信、IndexedDB、LocalStorage保存は行いません。
 
