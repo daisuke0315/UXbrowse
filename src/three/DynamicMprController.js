@@ -75,6 +75,8 @@ export class DynamicMprController {
       `targetMode: ${threeInput.targetMode ?? "orbit-target"}`,
       `distance: ${threeInput.distance.toFixed(2)} mm`,
       `orbitDistance: ${threeInput.orbitDistance?.toFixed?.(2) ?? "n/a"} mm`,
+      `modelCenterThree: ${threeInput.modelCenter ? formatVector(threeInput.modelCenter) : "n/a"}`,
+      `modelCenterDistance: ${threeInput.modelCenterDistance?.toFixed?.(2) ?? "n/a"} mm`,
       `quaternion: ${threeInput.quaternion ? threeInput.quaternion.map((x) => x.toFixed(4)).join(", ") : "n/a"}`,
       "",
       "Volume",

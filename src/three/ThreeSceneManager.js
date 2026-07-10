@@ -333,12 +333,18 @@ export class ThreeSceneManager {
     this.objModel.updateMatrixWorld(true);
     this.camera.updateMatrixWorld();
     const box = new THREE.Box3().setFromObject(this.objModel);
-    const target = new THREE.Vector3();
+    const modelCenter = new THREE.Vector3();
     const eye = new THREE.Vector3();
+    const target = new THREE.Vector3();
     const n = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize();
-    box.getCenter(target);
-    eye.copy(target).addScaledVector(n, -Math.max(0.001, distance));
+    box.getCenter(modelCenter);
+    this.camera.getWorldPosition(eye);
+    // ViewSync MPRの正規仕様:
+    // モデル連動中でもMPR注視点はモデル中心固定にしない。
+    // Unity版と同じくカメラ前方の固定距離点を使い、ズーム時にMPR断面を移動させる。
+    // modelCenterは位置合わせ確認用の参照値として返すだけで、MPR中心には使わない。
+    target.copy(eye).addScaledVector(n, Math.max(0.001, distance));
     return {
       eye: [eye.x, eye.y, eye.z],
       target: [target.x, target.y, target.z],
@@ -346,7 +352,9 @@ export class ThreeSceneManager {
       n: [n.x, n.y, n.z],
       distance,
       orbitDistance: this.camera.position.distanceTo(this.controls.target),
-      targetMode: "model-center-camera-facing",
+      modelCenter: [modelCenter.x, modelCenter.y, modelCenter.z],
+      modelCenterDistance: eye.distanceTo(modelCenter),
+      targetMode: "camera-forward-model-linked",
     };
   }
 

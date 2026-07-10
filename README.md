@@ -2,7 +2,7 @@
 
 外観モデル連動MPRビューア
 
-ブラウザ内だけで非圧縮CT DICOMシリーズ又は単一`.mha`ボリュームを読み込み、`eye`、`target`、`up` から任意断面MPRを生成する試作です。Three.jsのカメラ、OrbitControls、注視点、読み込んだ3DモデルにMPRを連動させます。外部サーバー送信、IndexedDB、LocalStorage保存は行いません。
+ブラウザ内だけで非圧縮CT DICOMシリーズ又は単一`.mha`ボリュームを読み込み、`eye`、`target`、`up` から任意断面MPRを生成する試作です。Three.jsのカメラ、OrbitControls、カメラ前方固定距離のMPR注視点、読み込んだ3DモデルにMPRを連動させます。外部サーバー送信、IndexedDB、LocalStorage保存は行いません。
 
 ## 起動
 
@@ -23,18 +23,36 @@ Three.js本体、OrbitControls、OBJLoader、GLTFLoaderは `vendor/` にロー�
 
 実DICOMで試す場合は、`DICOMファイル` 又は `フォルダ` から同一CTシリーズを選択します。MHAで試す場合は、`MHAファイル` から `ElementDataFile = LOCAL` の単一`.mha`を選択します。読込後、左のThree.js表示をドラッグ、右ドラッグ、ホイール操作すると、カメラの `eye / target / up` がVolume座標へ変換され、MPRが更新されます。
 
-3Dモデルは `OBJモデル` 又は `GLBモデル` から読み込みます。`モデル連動MPR` がONの場合、モデル中心をMPR中心、モデルローカルZ方向をMPR法線、モデルローカルY方向を画像上方向としてMPRを更新します。
+3Dモデルは `OBJモデル` 又は `GLBモデル` から読み込みます。`モデル連動MPR` がONの場合でも、MPR中心はモデル中心固定ではなく `camera.position + camera.forward * MPR距離` で定義します。ズームでカメラ位置が変わるとMPR中心も移動します。モデル中心はデバッグ用の参照値として表示します。
+
+## 注視点仕様
+
+ViewSync MPRのMPR注視点は、Three.js標準の `OrbitControls.target` でも、3Dモデルのバウンディングボックス中心でもありません。現在の正規仕様は以下です。
+
+```text
+MPR注視点 = camera.position + camera.forward * MPR距離
+```
+
+この仕様により、ズーム操作でカメラがモデルへ近づくと、カメラ前方に固定されたMPRプレーンもCT/MHA空間内で移動します。これはUnity版の「カメラ前方に固定したプレーンをtranslateして重畳する」挙動に合わせるための仕様です。
+
+用語は次のように分けます。
+
+- `OrbitControls.target`: 3D操作の回転中心です。MPR中心ではありません。
+- `modelCenter`: OBJ / GLBモデルの現在のワールド中心です。MPR中心ではなく、位置確認用の参照値です。
+- `targetThree` / `targetVolume`: MPR注視点です。`camera-forward` 系の値として計算し、MPR断面中心になります。
+- `注視点距離/MPR距離`: カメラ位置からMPR注視点までの距離です。
 
 ## 現在の確定状態
 
-2026-07-09時点で、以下の動作を現状仕様として保存しています。
+2026-07-10時点で、以下の動作を現状仕様として保存しています。
 
 - DICOM / MHAボリューム読込後、Three.jsカメラ操作にMPRが追従します。
 - OBJ / GLBモデル読込後も、Three.jsカメラ操作はカメラ基準のMPR更新として動き続けます。
 - Canvas上に生成したMPR画像は、Three.js空間内のMPRプレーンにもCanvasTextureとして重畳表示されます。
 - MPRプレーンは `plane.center / u / v / n` をVolume座標からThree.js座標へ変換し、断面と同じ位置・姿勢で配置されます。
 - MPRプレーンの表示、Opacity、境界線表示をMPRパネルから切り替えできます。
-- `モデル連動MPR` がONの場合、モデル読込、モデル移動、回転、Scale変更、Opacity変更、MPR距離変更などのモデル操作時だけ、モデル中心基準のMPRを生成します。
+- `モデル連動MPR` がONの場合、MPR中心は `camera.position + camera.forward * MPR距離` で生成します。モデル中心はMPR中心ではなく、デバッグ欄の `modelCenterThree` として確認します。
+- ズームでカメラ位置が動いた場合、MPR注視点とMPR断面も移動します。これはViewSync MPRの正規仕様です。
 - `MPRプレーン前景透過` がONの場合、MPRプレーンよりカメラ手前側にあるOBJ / GLBメッシュをshaderで半透明にします。
 - 前景透過の `前景Alpha`、`前景透過距離 mm`、`フェード幅 mm`、`完全切断` はMPRパネルから調整できます。`前景透過距離 = 0` の場合は、MPRプレーンよりカメラ手前側全体が透過対象です。
 - MPRプレーン側では `CT値しきい値透過` により、指定したCT値以下の画素を透明化できます。初期値は `-500` です。
@@ -87,7 +105,7 @@ JPEG/JPEG-LS/JPEG2000圧縮DICOM、Enhanced CT、圧縮MHA、`.mhd + .raw`、GLB
 
 Volumeと既に同じ座標系で作られたモデルをそのまま重ねたい場合は、`注視点へ中心合わせ` をOFF、`Scale = 1`、`位置 = 0,0,0`、`回転 = 0,0,0` にしてください。Three.jsの1単位は1 mmとして扱います。
 
-GLB読込後も、通常のカメラ操作ではカメラ基準MPRを更新します。モデル基準でMPRを確認したい場合は、`モデル連動MPR` をONにしたままモデル操作を行います。
+GLB読込後も、通常のカメラ操作ではカメラ前方固定距離のMPRを更新します。`モデル連動MPR` がONでも、MPR中心はモデル中心固定にはしません。モデル中心は `modelCenterThree` としてデバッグ表示し、MPR中心は `targetThree` / `targetVolume` として表示します。
 
 MPRプレーンがモデル内部に入り込む場合は、`前景透過` をONにしておくと、カメラ手前側のモデルだけが半透明になり、MPR断面を見やすくできます。`前景Alpha = 0` 又は `完全切断` で手前側をほぼ非表示にできます。前景透過は「プレーンから離れるほど不透明に戻す」のではなく、手前側を基本的に `前景Alpha` まで落とし、プレーン近傍だけ `フェード幅 mm` で滑らかに遷移させる実装です。
 
