@@ -42,6 +42,10 @@
             <input id="glbInput" type="file" accept=".glb,model/gltf-binary">
           </label>
           <label class="file-button">
+            GLB＋テクスチャ選択
+            <input id="glbFolderInput" type="file" multiple webkitdirectory>
+          </label>
+          <label class="file-button">
             テクスチャ画像
             <input id="textureInput" type="file" accept="image/png,image/jpeg,image/webp">
           </label>
@@ -54,7 +58,7 @@
             <input id="fileInput" type="file" multiple>
           </label>
           <label class="file-button">
-            フォルダ
+            DICOMフォルダ
             <input id="folderInput" type="file" multiple webkitdirectory>
           </label>
         </div>
@@ -101,7 +105,7 @@
             </label>
             <label>Scale <input id="objScale" type="number" min="0.001" step="0.1" value="1"></label>
             <label>Opacity <input id="objOpacity" type="number" min="0.05" max="1" step="0.05" value="0.75"></label>
-            <label>注視点距離/MPR距離 <input id="objMprDistance" type="number" min="1" step="10" value="500"></label>
+            <label>注視点距離/MPR距離 <input id="objMprDistance" type="number" min="1" step="10" value="1500"></label>
             <div class="axis-grid">
               <span>位置</span>
               <label>X <input id="objPosX" type="number" step="1" value="0"></label>
@@ -181,7 +185,7 @@
             <label>Camera Plane距離 mm <input id="mprCameraPlaneDistance" type="number" min="0" step="1" value="0"></label>
             <div class="control-row">
               <button id="mprFlipUBtn" type="button" aria-pressed="false">MPR U反転</button>
-              <button id="mprFlipVBtn" type="button" aria-pressed="false">MPR V反転</button>
+              <button id="mprFlipVBtn" type="button" aria-pressed="true">MPR V反転: ON</button>
               <button id="mprFlipResetBtn" type="button">MPR UVリセット</button>
             </div>
             <label class="checkbox-label">
@@ -231,6 +235,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=mpr-plane-ct-threshold-alpha"></script>
+    <script type="module" src="./src/main.js?v=glb-folder-resources"></script>
   </body>
 </html>

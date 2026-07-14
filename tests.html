@@ -18,6 +18,7 @@
       import { WindowingProcessor } from "./src/WindowingProcessor.js";
       import { volumeCenter, volumeVoxelCenterSpan } from "./src/VolumeGeometry.js";
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
+      import { resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=glb-folder-resources";
       import { dot, length } from "./src/math3d.js";
 
       const lines = [];
@@ -74,6 +75,15 @@
       assert("UT-113 vector ignores translation", mapper.threeVectorToDicom([0, 0, 1]).every((v, i) => close(v, [0, 0, 1][i])));
       const roundTrip = mapper.dicomPointToThree(mappedPoint);
       assert("UT-114 inverse transform", roundTrip.every((v, i) => close(v, [1, 2, 3][i])));
+
+      const localGlbFiles = [
+        { name: "model.glb", webkitRelativePath: "case/model.glb" },
+        { name: "diffuse.png", webkitRelativePath: "case/diffuse.png" },
+        { name: "normal.png", webkitRelativePath: "case/textures/normal.png" },
+      ];
+      assert("UT-120 GLB sibling resource", resolveLocalGltfResource(localGlbFiles, localGlbFiles[0], "diffuse.png") === localGlbFiles[1]);
+      assert("UT-121 GLB nested resource", resolveLocalGltfResource(localGlbFiles, localGlbFiles[0], "textures/normal.png") === localGlbFiles[2]);
+      assert("UT-122 GLB missing resource", resolveLocalGltfResource(localGlbFiles, localGlbFiles[0], "missing.png") === null);
 
       const mhaLoader = new MhaLoader();
       const shortMha = createMhaBuffer({

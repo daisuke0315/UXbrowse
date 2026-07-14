@@ -2,6 +2,15 @@
 
 外観モデル連動MPRビューア
 
+## ドキュメント
+
+- [プロジェクト概要](docs/project-overview.md): 開発背景、解決したい課題、基本コンセプト、想定用途
+- [設計判断記録](docs/architecture-decisions.md): 現在の構成と正規仕様を採用した理由
+- [研究・開発状況](docs/research-status.md): 実装済み、未実装、実験値、未検証事項の区別
+- [座標系定義](docs/coordinate-system.md): DICOM、Volume、Three.js間の座標規約
+- [MPRアルゴリズム設計](docs/mpr-algorithm.md): 任意断面の計算方法
+- [Three.js連動MPR](docs/dynamic-mpr.md): カメラ連動の処理と注視点仕様
+
 ブラウザ内だけで非圧縮CT DICOMシリーズ又は単一`.mha`ボリュームを読み込み、`eye`、`target`、`up` から任意断面MPRを生成する試作です。Three.jsのカメラ、OrbitControls、カメラ前方固定距離のMPR注視点、読み込んだ3DモデルにMPRを連動させます。外部サーバー送信、IndexedDB、LocalStorage保存は行いません。
 
 ## 起動
@@ -23,7 +32,7 @@ Three.js本体、OrbitControls、OBJLoader、GLTFLoaderは `vendor/` にロー�
 
 実DICOMで試す場合は、`DICOMファイル` 又は `フォルダ` から同一CTシリーズを選択します。MHAで試す場合は、`MHAファイル` から `ElementDataFile = LOCAL` の単一`.mha`を選択します。読込後、左のThree.js表示をドラッグ、右ドラッグ、ホイール操作すると、カメラの `eye / target / up` がVolume座標へ変換され、MPRが更新されます。
 
-3Dモデルは `OBJモデル` 又は `GLBモデル` から読み込みます。`モデル連動MPR` がONの場合でも、MPR中心はモデル中心固定ではなく `camera.position + camera.forward * MPR距離` で定義します。ズームでカメラ位置が変わるとMPR中心も移動します。モデル中心はデバッグ用の参照値として表示します。
+3Dモデルは `OBJモデル`、`GLBモデル` 又は `GLB＋テクスチャ選択` から読み込みます。外部textureを参照するGLBは、GLBとtextureを含むフォルダを`GLB＋テクスチャ選択`から選ぶと、GLB内の相対パスに従って自動読込します。`モデル連動MPR` がONの場合でも、MPR中心はモデル中心固定ではなく `camera.position + camera.forward * MPR距離` で定義します。ズームでカメラ位置が変わるとMPR中心も移動します。モデル中心はデバッグ用の参照値として表示します。
 
 ## 注視点仕様
 
@@ -42,12 +51,15 @@ MPR注視点 = camera.position + camera.forward * MPR距離
 - `targetThree` / `targetVolume`: MPR注視点です。`camera-forward` 系の値として計算し、MPR断面中心になります。
 - `注視点距離/MPR距離`: カメラ位置からMPR注視点までの距離です。
 
+初期値はMPR距離`1500 mm`、MPR画像方向は`V反転 ON`です。`MPR UVリセット`を押した場合もこの初期状態へ戻ります。
+
 ## 現在の確定状態
 
 2026-07-10時点で、以下の動作を現状仕様として保存しています。
 
 - DICOM / MHAボリューム読込後、Three.jsカメラ操作にMPRが追従します。
 - OBJ / GLBモデル読込後も、Three.jsカメラ操作はカメラ基準のMPR更新として動き続けます。
+- OBJ / GLBモデルは、撮影済みの外観色を照明で変化させないUnlit表示を既定とします。GLBのbase color、texture、vertex color、alpha設定は可能な範囲で引き継ぎます。
 - Canvas上に生成したMPR画像は、Three.js空間内のMPRプレーンにもCanvasTextureとして重畳表示されます。
 - MPRプレーンは `plane.center / u / v / n` をVolume座標からThree.js座標へ変換し、断面と同じ位置・姿勢で配置されます。
 - MPRプレーンの表示、Opacity、境界線表示をMPRパネルから切り替えできます。
@@ -74,7 +86,8 @@ MPR注視点 = camera.position + camera.forward * MPR距離
 - MPRプレーンよりカメラ手前側にあるOBJ / GLBモデルのshader透過
 - MPRプレーン上の任意CT値しきい値以下のalpha透過
 - 最近傍補間、三線形補間、Window Level / Width、Min-Maxプリセット
-- OBJ / GLBモデル読込、表示、中心合わせ、Scale、Opacity、位置、回転変更
+- OBJ / GLBモデル読込、GLBフォルダ内の外部texture自動解決、表示、中心合わせ、Scale、Opacity、位置、回転変更
+- 外観モデルのUnlit表示
 - CT/MHA座標のX/Y/Z軸反転切り替え
 
 JPEG/JPEG-LS/JPEG2000圧縮DICOM、Enhanced CT、圧縮MHA、`.mhd + .raw`、GLB外部ファイル、Draco/KTX2、PACS/DICOMweb、患者情報管理、保存機能は対象外です。
@@ -105,13 +118,13 @@ JPEG/JPEG-LS/JPEG2000圧縮DICOM、Enhanced CT、圧縮MHA、`.mhd + .raw`、GLB
 
 Volumeと既に同じ座標系で作られたモデルをそのまま重ねたい場合は、`注視点へ中心合わせ` をOFF、`Scale = 1`、`位置 = 0,0,0`、`回転 = 0,0,0` にしてください。Three.jsの1単位は1 mmとして扱います。
 
-GLB読込後も、通常のカメラ操作ではカメラ前方固定距離のMPRを更新します。`モデル連動MPR` がONでも、MPR中心はモデル中心固定にはしません。モデル中心は `modelCenterThree` としてデバッグ表示し、MPR中心は `targetThree` / `targetVolume` として表示します。
+GLB読込後も、通常のカメラ操作ではカメラ前方固定距離のMPRを更新します。外部texture付きGLBは`GLB＋テクスチャ選択`からフォルダごと選択してください。`モデル連動MPR` がONでも、MPR中心はモデル中心固定にはしません。モデル中心は `modelCenterThree` としてデバッグ表示し、MPR中心は `targetThree` / `targetVolume` として表示します。
 
 MPRプレーンがモデル内部に入り込む場合は、`前景透過` をONにしておくと、カメラ手前側のモデルだけが半透明になり、MPR断面を見やすくできます。`前景Alpha = 0` 又は `完全切断` で手前側をほぼ非表示にできます。前景透過は「プレーンから離れるほど不透明に戻す」のではなく、手前側を基本的に `前景Alpha` まで落とし、プレーン近傍だけ `フェード幅 mm` で滑らかに遷移させる実装です。
 
 可視光モデルの断面にCT/MHA由来MPRを直感的に重ねたい場合は、`CT値しきい値透過` をONにして、空気や低吸収域に相当する値を透明化してください。例えばCTなら `-500` 付近を初期確認値として使えます。
 
-OBJは単体 `.obj` のみ対応です。`.mtl`、OBJ外部テクスチャ、複数ファイル一括読込は未対応です。GLBは単一 `.glb` のみ対応で、外部 `.gltf + .bin + texture`、Draco、KTX2は未対応です。
+OBJは単体 `.obj` のみ対応です。`.mtl`、OBJ外部テクスチャ、複数ファイル一括読込は未対応です。GLBは埋め込みresourceを持つ単一`.glb`に加え、`GLB＋テクスチャ選択`時はGLBが相対パスで参照する同一フォルダ配下のtexture等に対応します。外部`.gltf + .bin + texture`、Draco、KTX2は未対応です。
 
 ## テスト
 

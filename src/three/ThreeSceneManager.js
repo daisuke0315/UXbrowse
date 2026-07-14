@@ -173,13 +173,37 @@ export class ThreeSceneManager {
     return this.loadGlbArrayBuffer(arrayBuffer, file.name, options);
   }
 
-  loadGlbArrayBuffer(arrayBuffer, fileName = "model.glb", options = {}) {
+  async loadGlbFileSet(fileList, options = {}) {
+    if (!this.initialized) throw new Error("Three.js is not initialized");
+    const files = [...fileList];
+    const glbFiles = files.filter((file) => file.name.toLowerCase().endsWith(".glb"));
+    if (glbFiles.length === 0) throw new Error("選択したフォルダにGLBファイルがありません");
+    if (glbFiles.length > 1) throw new Error(`GLBファイルが${glbFiles.length}個あります。1つだけ含むフォルダを選択してください`);
+    const modelFile = glbFiles[0];
+    const arrayBuffer = await modelFile.arrayBuffer();
+    return this.loadGlbArrayBuffer(arrayBuffer, modelFile.name, options, { resourceFiles: files, modelFile });
+  }
+
+  loadGlbArrayBuffer(arrayBuffer, fileName = "model.glb", options = {}, { resourceFiles = [], modelFile = null } = {}) {
     if (!this.initialized) throw new Error("Three.js is not initialized");
     const start = performance.now();
-    const loader = new this.GLTFLoader();
+    const objectUrls = [];
+    const resolvedResources = new Set();
+    const manager = new this.THREE.LoadingManager();
+    if (resourceFiles.length && modelFile) {
+      manager.setURLModifier((url) => {
+        const resourceFile = resolveLocalGltfResource(resourceFiles, modelFile, url);
+        if (!resourceFile) return url;
+        const objectUrl = URL.createObjectURL(resourceFile);
+        objectUrls.push(objectUrl);
+        resolvedResources.add(resourceFile.webkitRelativePath || resourceFile.name);
+        return objectUrl;
+      });
+    }
+    const loader = new this.GLTFLoader(manager);
 
     // GLTFLoader.parseはcallback APIなのでPromiseで包む。pathは空文字にして、
-    // 初期対応範囲を「単一.glb内に埋め込まれたgeometry/material/texture」に限定する。
+    // フォルダ読込時はGLBから参照された同階層のtexture等をObject URLへ解決する。
     return new Promise((resolve, reject) => {
       loader.parse(
         arrayBuffer,
@@ -198,6 +222,8 @@ export class ThreeSceneManager {
           });
           this.replaceModel(object, options);
           const summary = this.summarizeObject(object);
+          summary.fileName = fileName;
+          summary.resolvedResources = [...resolvedResources];
           if (summary.meshes === 0) {
             this.clearObjModel();
             reject(new Error("GLB内にmeshがありません"));
@@ -207,6 +233,7 @@ export class ThreeSceneManager {
             fileName,
             meshes: summary.meshes,
             vertices: summary.vertices,
+            resolvedResources: summary.resolvedResources,
             size: summary.size.map((v) => Number(v.toFixed(2))),
             ms: Math.round(performance.now() - start),
           });
@@ -214,6 +241,8 @@ export class ThreeSceneManager {
         },
         (error) => reject(error instanceof Error ? error : new Error(String(error)))
       );
+    }).finally(() => {
+      for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl);
     });
   }
 
@@ -257,27 +286,50 @@ export class ThreeSceneManager {
 
   prepareLoadedModel(object, { fileName, sourceFormat, opacity = 0.75, forceMaterial = false }) {
     const THREE = this.THREE;
+    const unlitMaterials = new Map();
     object.name = fileName;
     object.userData.sourceFormat = sourceFormat;
     object.userData.fileName = fileName;
     object.traverse((child) => {
       if (!child.isMesh) return;
-      // OBJは材質情報なしの単体ファイルを想定するため確認しやすい標準材質を付与する。
-      // GLBは埋め込みmaterial/textureを尊重し、透明度だけ後段の共通処理で調整する。
+      // 外観参照モデルは撮影済みの色を照明で変化させず表示するため、Unlitを正規仕様とする。
+      // GLBでは元materialの色・texture・alpha設定を引き継ぎ、照明依存のPBR要素だけを外す。
       if (forceMaterial || !child.material) {
-        child.material = new THREE.MeshStandardMaterial({
+        child.material = new THREE.MeshBasicMaterial({
           color: 0xf4a261,
-          roughness: 0.55,
-          metalness: 0.05,
           transparent: opacity < 1,
           opacity,
           side: THREE.DoubleSide,
         });
+      } else {
+        const sourceMaterials = asMaterialArray(child.material);
+        const converted = sourceMaterials.map((material) => {
+          if (unlitMaterials.has(material)) return unlitMaterials.get(material);
+          const unlit = new THREE.MeshBasicMaterial({
+            name: material.name,
+            color: material.color?.clone?.() ?? new THREE.Color(0xffffff),
+            map: material.map ?? null,
+            alphaMap: material.alphaMap ?? null,
+            vertexColors: material.vertexColors === true || child.geometry?.hasAttribute?.("color") === true,
+            transparent: material.transparent || opacity < 1,
+            opacity,
+            alphaTest: material.alphaTest ?? 0,
+            side: material.side,
+            depthTest: material.depthTest,
+            depthWrite: material.depthWrite,
+            blending: material.blending,
+            fog: material.fog,
+          });
+          unlitMaterials.set(material, unlit);
+          return unlit;
+        });
+        child.material = Array.isArray(child.material) ? converted : converted[0];
       }
       child.castShadow = false;
       child.receiveShadow = false;
       child.renderOrder = 1;
     });
+    for (const material of unlitMaterials.keys()) material.dispose?.();
   }
 
   replaceModel(object, options) {
@@ -327,7 +379,7 @@ export class ThreeSceneManager {
     return this.summarizeObject(this.objModel);
   }
 
-  getObjCameraInput(distance = 500) {
+  getObjCameraInput(distance = 1500) {
     if (!this.objModel) return null;
     const THREE = this.THREE;
     this.objModel.updateMatrixWorld(true);
@@ -542,4 +594,31 @@ function degToRad(degrees) {
 
 function asMaterialArray(material) {
   return Array.isArray(material) ? material : [material];
+}
+
+export function resolveLocalGltfResource(files, modelFile, requestedUrl) {
+  const requestedPath = normalizeLocalResourcePath(requestedUrl);
+  if (!requestedPath || requestedPath.startsWith("data:") || requestedPath.startsWith("blob:")) return null;
+  const modelPath = normalizeLocalResourcePath(modelFile.webkitRelativePath || modelFile.name);
+  const slash = modelPath.lastIndexOf("/");
+  const modelDirectory = slash >= 0 ? modelPath.slice(0, slash) : "";
+  const expectedPath = normalizeLocalResourcePath(modelDirectory ? `${modelDirectory}/${requestedPath}` : requestedPath);
+  const normalizedFiles = files.map((file) => ({
+    file,
+    path: normalizeLocalResourcePath(file.webkitRelativePath || file.name),
+  }));
+  const exact = normalizedFiles.find((entry) => entry.path === expectedPath);
+  if (exact) return exact.file;
+  const expectedLower = expectedPath.toLowerCase();
+  return normalizedFiles.find((entry) => entry.path.toLowerCase() === expectedLower)?.file ?? null;
+}
+
+function normalizeLocalResourcePath(value) {
+  let path = String(value ?? "").split(/[?#]/, 1)[0].replace(/\\/g, "/");
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // 不正なpercent encodingは元文字列のまま比較する。
+  }
+  return path.replace(/^\.\//, "").replace(/^\/+/, "").replace(/\/\.\//g, "/");
 }

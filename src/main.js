@@ -7,7 +7,7 @@ import { ValidationLogger } from "./ValidationLogger.js";
 import { formatVector } from "./math3d.js";
 import { volumeCenter } from "./VolumeGeometry.js";
 import { viewerConfig } from "./config/viewerConfig.js";
-import { ThreeSceneManager } from "./three/ThreeSceneManager.js";
+import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=glb-folder-resources";
 import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController } from "./three/DynamicMprController.js";
@@ -19,6 +19,8 @@ const mhaLoader = new MhaLoader(logger);
 const builder = new VolumeBuilder(logger);
 const renderer = new MprRenderer(logger);
 const planeCalculator = new MprPlaneCalculator();
+const DEFAULT_MPR_DISTANCE = 1500;
+const DEFAULT_MPR_UV_FLIP = [1, -1];
 
 const state = {
   volume: null,
@@ -31,7 +33,7 @@ const state = {
   threeReady: false,
   dynamicInfo: null,
   volumeAxisFlip: [1, 1, 1],
-  mprUvFlip: [1, 1],
+  mprUvFlip: [...DEFAULT_MPR_UV_FLIP],
   defaults: {
     eye: [0, 0, -500],
     target: [0, 0, 0],
@@ -47,6 +49,7 @@ const els = {
   mhaInput: document.querySelector("#mhaInput"),
   objInput: document.querySelector("#objInput"),
   glbInput: document.querySelector("#glbInput"),
+  glbFolderInput: document.querySelector("#glbFolderInput"),
   textureInput: document.querySelector("#textureInput"),
   demoVolumeBtn: document.querySelector("#demoVolumeBtn"),
   statusText: document.querySelector("#statusText"),
@@ -123,6 +126,7 @@ els.folderInput.addEventListener("change", () => handleFiles(els.folderInput.fil
 els.mhaInput.addEventListener("change", () => handleMhaFile(els.mhaInput.files?.[0]));
 els.objInput.addEventListener("change", () => handleObjFile(els.objInput.files?.[0]));
 els.glbInput.addEventListener("change", () => handleGlbFile(els.glbInput.files?.[0]));
+els.glbFolderInput.addEventListener("change", () => handleGlbFolder(els.glbFolderInput.files));
 els.textureInput.addEventListener("change", () => handleTextureFile(els.textureInput.files?.[0]));
 els.demoVolumeBtn.addEventListener("click", () => loadDemoVolume());
 els.demoObjBtn.addEventListener("click", () => loadDemoObj());
@@ -258,7 +262,7 @@ async function handleGlbFile(file) {
   }
   try {
     els.statusText.textContent = `${file.name} を読込中...`;
-    // GLBはmaterial/textureを内包できるため、OBJのように材質を置き換えず透明度だけ共通操作へ渡す。
+    // GLBの色・texture・alpha設定を引き継ぎ、外観参照向けのUnlit materialへ変換する。
     await state.threeScene.loadGlbFile(file, getObjOptions());
     els.statusText.textContent = `GLB読込完了: ${file.name}`;
     requestObjectLinkedMpr("glb-file");
@@ -268,6 +272,27 @@ async function handleGlbFile(file) {
     els.statusText.textContent = `GLB読込失敗: ${error.message}`;
   } finally {
     els.glbInput.value = "";
+  }
+}
+
+async function handleGlbFolder(fileList) {
+  const files = [...(fileList ?? [])];
+  if (!files.length) return;
+  if (!state.threeReady || !state.threeScene) {
+    logger.error("GLB＋テクスチャ読込失敗", { message: "Three.jsが初期化されていません" });
+    return;
+  }
+  try {
+    els.statusText.textContent = `GLB＋テクスチャを読込中... (${files.length}ファイル)`;
+    const summary = await state.threeScene.loadGlbFileSet(files, getObjOptions());
+    els.statusText.textContent = `GLB＋テクスチャ読込完了: ${summary.fileName}`;
+    requestObjectLinkedMpr("glb-folder");
+    writeDiagnostics();
+  } catch (error) {
+    logger.error("GLB＋テクスチャ読込失敗", { message: error.message });
+    els.statusText.textContent = `GLB＋テクスチャ読込失敗: ${error.message}`;
+  } finally {
+    els.glbFolderInput.value = "";
   }
 }
 
@@ -379,7 +404,7 @@ function toggleMprUvFlip(axis) {
 }
 
 function resetMprUvFlip() {
-  state.mprUvFlip = [1, 1];
+  state.mprUvFlip = [...DEFAULT_MPR_UV_FLIP];
   applyMprUvFlip();
 }
 
@@ -533,7 +558,7 @@ async function initThree() {
       state.threeScene.THREE,
       state.threeScene.camera,
       state.threeScene.controls,
-      () => readFloat(els.objMprDistance, 500)
+      () => readFloat(els.objMprDistance, DEFAULT_MPR_DISTANCE)
     );
     installScheduler();
     state.threeScene.onControlsChange(() => requestLinkedMpr("camera"));
@@ -551,7 +576,7 @@ function installScheduler() {
   state.scheduler = new MprUpdateScheduler((reason) => {
     if (!state.volume || !state.dynamicController) return;
     if (shouldUseObjectMpr()) {
-      const objInput = state.threeScene.getObjCameraInput(readFloat(els.objMprDistance, 500));
+      const objInput = state.threeScene.getObjCameraInput(readFloat(els.objMprDistance, DEFAULT_MPR_DISTANCE));
       state.dynamicController.updateFromThreeInput(state.volume, objInput, reason);
     } else {
       state.dynamicController.update(state.volume, reason);
