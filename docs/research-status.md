@@ -14,6 +14,7 @@
 - Three.jsカメラの`eye / target / up`に連動したMPR更新
 - OBJ／GLBモデルの表示と基本的な位置・姿勢調整
 - OBJ／GLB外観モデルのUnlit表示（GLBのbase color、texture、vertex color、alphaを可能な範囲で継承）
+- フォトグラメトリmeshの両面不透明描画（depth test／depth write有効）
 - GLBフォルダ選択時の外部texture相対パス解決
 - MPR画像のThree.js空間内プレーン重畳
 - MPR平面よりカメラ手前側にあるモデルのshader透過
@@ -56,7 +57,10 @@
 - Window処理
 - Three.jsとVolume間の点・ベクトル変換
 - GLBと同一フォルダ／サブフォルダにある外部resourceの相対パス解決
+- モデル／Volume範囲へ追随するカメラnear／far計算
 - MHAヘッダ、データ型、異常データの処理
+
+実データ`260108-3.glb`はglTF上で`alphaMode`未指定（OPAQUE）であり、外部textureのalphaも全画素255です。通常不透明表示で奥の面が手前面を上書きする透明ソート問題ではありません。角度依存で内部構造が見える直接原因は、外観モデルを`FrontSide`に固定したことで、カメラに対して裏向きになった手前面がback-face cullingされていたことです。外観モデルを`DoubleSide`としつつdepth test／depth writeを有効に保ち、両向きの手前面が奥の構造を遮蔽する構成へ変更しました。Reverse-Zと動的near／farは、遠距離時の消失と深度精度の対策として別途維持しています。
 
 次の統合テストは未整備です。
 

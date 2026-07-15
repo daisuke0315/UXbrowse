@@ -2,7 +2,7 @@ export class ModelVisibilityShaderController {
   constructor(THREE) {
     this.THREE = THREE;
     this.records = new Map();
-    this.enabled = true;
+    this.enabled = false;
     this.frontAlpha = 0.15;
     this.foregroundDistance = 0;
     this.fadeWidth = 10;
@@ -15,7 +15,10 @@ export class ModelVisibilityShaderController {
     this.frontAlpha = frontAlpha;
     this.foregroundDistance = foregroundDistance;
     this.fadeWidth = fadeWidth;
-    for (const record of this.records.values()) this.updateRecordUniforms(record);
+    for (const record of this.records.values()) {
+      this.updateMaterialRenderState(record);
+      this.updateRecordUniforms(record);
+    }
   }
 
   updatePlane({ centerThree, nThree } = {}) {
@@ -41,12 +44,12 @@ export class ModelVisibilityShaderController {
       originalOnBeforeCompile: material.onBeforeCompile,
       originalTransparent: material.transparent,
       originalDepthWrite: material.depthWrite,
+      originalAlphaHash: material.alphaHash === true,
       shaders: [],
       patchStatus: [],
     };
     this.records.set(material, record);
-    material.transparent = true;
-    material.depthWrite = false;
+    this.updateMaterialRenderState(record);
     material.onBeforeCompile = (shader) => {
       record.originalOnBeforeCompile?.(shader);
       shader.uniforms.mprClipEnabled = { value: this.enabled };
@@ -88,8 +91,8 @@ export class ModelVisibilityShaderController {
         "}",
       ].join("\n");
       const applyForegroundAlphaCode = [
-        "if (mprForegroundAlphaFactor <= 0.0001) discard;",
-        "gl_FragColor.a *= mprForegroundAlphaFactor;",
+        "diffuseColor.a *= clamp(mprForegroundAlphaFactor, 0.0, 1.0);",
+        "#include <alphahash_fragment>",
       ].join("\n");
       shader.fragmentShader = shader.fragmentShader
         .replace("#include <common>", [
@@ -102,18 +105,17 @@ export class ModelVisibilityShaderController {
           "uniform float mprForegroundDistance;",
           "uniform float mprFadeWidth;",
         ].join("\n"))
-        .replace("#include <opaque_fragment>", () => {
+        .replace("#include <alphahash_fragment>", () => {
           status.fragmentAlpha = true;
           return [
             foregroundAlphaCode,
-            "#include <opaque_fragment>",
             applyForegroundAlphaCode,
           ].join("\n");
         });
-      if (!status.fragmentAlpha && shader.fragmentShader.includes("#include <output_fragment>")) {
-        shader.fragmentShader = shader.fragmentShader.replace("#include <output_fragment>", () => {
+      if (!status.fragmentAlpha && shader.fragmentShader.includes("#include <opaque_fragment>")) {
+        shader.fragmentShader = shader.fragmentShader.replace("#include <opaque_fragment>", () => {
           status.fragmentAlpha = true;
-          return `${foregroundAlphaCode}\n#include <output_fragment>\n${applyForegroundAlphaCode}`;
+          return `${foregroundAlphaCode}\nif (mprForegroundAlphaFactor <= 0.0001) discard;\n#include <opaque_fragment>`;
         });
       }
       record.patchStatus.push(status);
@@ -134,12 +136,24 @@ export class ModelVisibilityShaderController {
     }
   }
 
+  updateMaterialRenderState(record) {
+    const { material } = record;
+    const useHashedForeground = this.enabled && material.opacity >= 1 && !record.originalTransparent;
+    // GLB全体をtransparent/depthWrite=falseにすると、単一mesh内の三角形はソートされず
+    // 内部面が外表面より前に合成される。Alpha Hashならdiscard後も通常の深度を書ける。
+    material.alphaHash = record.originalAlphaHash || useHashedForeground;
+    material.transparent = record.originalTransparent || material.opacity < 1;
+    material.depthWrite = material.transparent ? false : record.originalDepthWrite;
+    material.needsUpdate = true;
+  }
+
   restore() {
     for (const record of this.records.values()) {
       const { material } = record;
       material.onBeforeCompile = record.originalOnBeforeCompile;
       material.transparent = record.originalTransparent;
       material.depthWrite = record.originalDepthWrite;
+      material.alphaHash = record.originalAlphaHash;
       material.needsUpdate = true;
     }
     this.records.clear();

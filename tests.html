@@ -18,7 +18,7 @@
       import { WindowingProcessor } from "./src/WindowingProcessor.js";
       import { volumeCenter, volumeVoxelCenterSpan } from "./src/VolumeGeometry.js";
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
-      import { resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=glb-folder-resources";
+      import { ThreeSceneManager, calculateRequiredCameraFar, calculateRequiredCameraNear, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=double-sided-depth";
       import { dot, length } from "./src/math3d.js";
 
       const lines = [];
@@ -84,6 +84,50 @@
       assert("UT-120 GLB sibling resource", resolveLocalGltfResource(localGlbFiles, localGlbFiles[0], "diffuse.png") === localGlbFiles[1]);
       assert("UT-121 GLB nested resource", resolveLocalGltfResource(localGlbFiles, localGlbFiles[0], "textures/normal.png") === localGlbFiles[2]);
       assert("UT-122 GLB missing resource", resolveLocalGltfResource(localGlbFiles, localGlbFiles[0], "missing.png") === null);
+      assert("UT-123 camera far minimum", calculateRequiredCameraFar([0, 0, 0], [0, 0, 0], 100) === 5000);
+      assert("UT-124 camera far follows distance", close(calculateRequiredCameraFar([0, 0, -6000], [0, 0, 0], 1000), 7700));
+      assert("UT-125 camera near follows empty space", close(calculateRequiredCameraNear([0, 0, -6000], [0, 0, 0], 1000), 1250));
+      assert("UT-126 camera near protects MPR", close(calculateRequiredCameraNear([0, 0, -6000], [0, 0, 0], 1000, 0.1, 1500), 375));
+
+      const fakeSourceMaterial = {
+        name: "photogrammetry",
+        color: { clone: () => ({}) },
+        map: null,
+        alphaMap: null,
+        vertexColors: false,
+        transparent: false,
+        alphaTest: 0,
+        depthTest: true,
+        depthWrite: true,
+        blending: 1,
+        fog: true,
+        dispose() {},
+      };
+      class FakeBasicMaterial {
+        constructor(options) {
+          Object.assign(this, options);
+          this.userData = {};
+          this.alphaHash = false;
+        }
+      }
+      const fakeMesh = {
+        isMesh: true,
+        material: fakeSourceMaterial,
+        geometry: { hasAttribute: () => false },
+      };
+      const fakeObject = {
+        userData: {},
+        traverse(callback) { callback(fakeMesh); },
+      };
+      const materialManager = new ThreeSceneManager(null, {}, null);
+      materialManager.THREE = { MeshBasicMaterial: FakeBasicMaterial, DoubleSide: 2 };
+      materialManager.prepareLoadedModel(fakeObject, {
+        fileName: "photogrammetry.glb",
+        sourceFormat: "GLB",
+        opacity: 1,
+      });
+      assert("UT-127 photogrammetry material is double-sided", fakeMesh.material.side === 2);
+      assert("UT-128 opaque model keeps depth", fakeMesh.material.transparent === false && fakeMesh.material.depthTest === true && fakeMesh.material.depthWrite === true);
 
       const mhaLoader = new MhaLoader();
       const shortMha = createMhaBuffer({

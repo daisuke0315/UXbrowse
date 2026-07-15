@@ -8,6 +8,12 @@ export class ThreeSceneManager {
     this.config = config;
     this.logger = logger;
     this.initialized = false;
+    this.foregroundOptions = {
+      enabled: false,
+      frontAlpha: 0.15,
+      foregroundDistance: 0,
+      fadeWidth: 10,
+    };
   }
 
   async init() {
@@ -23,7 +29,15 @@ export class ThreeSceneManager {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(this.config.background);
     this.camera = new THREE.PerspectiveCamera(this.config.fov, 1, this.config.near, 5000);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    this.sceneContentBounds = new THREE.Box3();
+    this.sceneContentSphere = new THREE.Sphere();
+    this.hasSceneContentBounds = false;
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: false,
+      // EXT_clip_control対応環境では通常Zより高精度。未対応時はThree.jsが通常Zへ戻す。
+      reversedDepthBuffer: true,
+    });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setSize(this.container.clientWidth || 640, this.container.clientHeight || 420);
     this.container.replaceChildren(this.renderer.domElement);
@@ -75,7 +89,11 @@ export class ThreeSceneManager {
     this.controls.update();
     this.running = true;
     this.animate();
-    this.logger.info("Three.js初期化完了", { ms: Math.round(performance.now() - start) });
+    this.logger.info("Three.js初期化完了", {
+      revision: THREE.REVISION,
+      reversedDepthBuffer: this.renderer.capabilities.reversedDepthBuffer === true,
+      ms: Math.round(performance.now() - start),
+    });
     return this;
   }
 
@@ -130,6 +148,7 @@ export class ThreeSceneManager {
     }
     this.controls.update();
     this.updateHelpers();
+    this.refreshSceneContentBounds();
     this.logger.info("Volume範囲BoxをThree.jsへ配置", {
       voxelCenterSpan: voxelCenterSize.map((v) => Number(v.toFixed(3))),
       displaySize: displaySize.map((v) => Number(v.toFixed(3))),
@@ -284,7 +303,7 @@ export class ThreeSceneManager {
     });
   }
 
-  prepareLoadedModel(object, { fileName, sourceFormat, opacity = 0.75, forceMaterial = false }) {
+  prepareLoadedModel(object, { fileName, sourceFormat, opacity = 1, forceMaterial = false }) {
     const THREE = this.THREE;
     const unlitMaterials = new Map();
     object.name = fileName;
@@ -299,7 +318,11 @@ export class ThreeSceneManager {
           color: 0xf4a261,
           transparent: opacity < 1,
           opacity,
+          // フォトグラメトリmeshは薄い開放面や局所的に反転した三角形を含み得る。
+          // FrontSideでcullすると手前面が角度依存で消え、奥の面が透けたように見える。
           side: THREE.DoubleSide,
+          depthTest: true,
+          depthWrite: true,
         });
       } else {
         const sourceMaterials = asMaterialArray(child.material);
@@ -314,7 +337,8 @@ export class ThreeSceneManager {
             transparent: material.transparent || opacity < 1,
             opacity,
             alphaTest: material.alphaTest ?? 0,
-            side: material.side,
+            // 両面をdepth test/write付きで描くことで、裏向きの手前面もdepthへ参加させる。
+            side: THREE.DoubleSide,
             depthTest: material.depthTest,
             depthWrite: material.depthWrite,
             blending: material.blending,
@@ -324,6 +348,11 @@ export class ThreeSceneManager {
           return unlit;
         });
         child.material = Array.isArray(child.material) ? converted : converted[0];
+      }
+      for (const material of asMaterialArray(child.material)) {
+        material.userData.viewSyncBaseTransparent = material.transparent;
+        material.userData.viewSyncBaseDepthWrite = material.depthWrite;
+        material.userData.viewSyncBaseAlphaHash = material.alphaHash === true;
       }
       child.castShadow = false;
       child.receiveShadow = false;
@@ -340,7 +369,7 @@ export class ThreeSceneManager {
     this.modelVisibility.applyToObject(this.objModel, this.foregroundOptions);
   }
 
-  applyObjTransform({ centerToTarget = false, scale = 1, opacity = 0.75, position = [0, 0, 0], rotation = [0, 0, 0], controlPosition = position, controlRotation = rotation, controlAxisFlip = [1, 1, 1] } = {}) {
+  applyObjTransform({ centerToTarget = false, scale = 1, opacity = 1, position = [0, 0, 0], rotation = [0, 0, 0], controlPosition = position, controlRotation = rotation, controlAxisFlip = [1, 1, 1] } = {}) {
     if (!this.objModel) return null;
     const THREE = this.THREE;
     this.lastModelOptions = {
@@ -370,13 +399,23 @@ export class ThreeSceneManager {
       if (child.isMesh && child.material) {
         for (const material of asMaterialArray(child.material)) {
           material.opacity = opacity;
-          material.transparent = opacity < 1 || this.foregroundOptions?.enabled === true;
+          const useHashedForeground = this.foregroundOptions?.enabled === true
+            && opacity >= 1
+            && material.userData.viewSyncBaseTransparent !== true;
+          material.alphaHash = material.userData.viewSyncBaseAlphaHash === true || useHashedForeground;
+          material.transparent = material.userData.viewSyncBaseTransparent === true || opacity < 1;
+          material.depthWrite = material.transparent
+            ? false
+            : material.userData.viewSyncBaseDepthWrite !== false;
+          material.depthTest = true;
           material.needsUpdate = true;
         }
       }
     });
     this.objModel.updateMatrixWorld(true);
-    return this.summarizeObject(this.objModel);
+    const summary = this.summarizeObject(this.objModel);
+    this.refreshSceneContentBounds();
+    return summary;
   }
 
   getObjCameraInput(distance = 1500) {
@@ -425,6 +464,7 @@ export class ThreeSceneManager {
     this.modelTexture?.dispose();
     this.modelTexture = null;
     this.objModel = null;
+    this.refreshSceneContentBounds();
     this.logger.info(`${sourceFormat}モデルを消去しました`);
   }
 
@@ -462,7 +502,7 @@ export class ThreeSceneManager {
     return this.mprPlaneOverlay?.getPlaneInfo?.() ?? null;
   }
 
-  updateForegroundTransparency({ foregroundEnabled = true, frontAlpha = 0.15, foregroundDistance = 0, fadeWidth = 10, cutMode = false } = {}) {
+  updateForegroundTransparency({ foregroundEnabled = false, frontAlpha = 0.15, foregroundDistance = 0, fadeWidth = 10, cutMode = false } = {}) {
     this.foregroundOptions = {
       enabled: foregroundEnabled,
       frontAlpha: cutMode ? 0 : frontAlpha,
@@ -479,6 +519,10 @@ export class ThreeSceneManager {
     let vertices = 0;
     let meshesWithoutUv = 0;
     let materialsWithMap = 0;
+    let transparentMaterials = 0;
+    let depthWriteMaterials = 0;
+    let doubleSidedMaterials = 0;
+    let alphaHashMaterials = 0;
     object.traverse((child) => {
       if (!child.isMesh) return;
       meshes += 1;
@@ -487,6 +531,10 @@ export class ThreeSceneManager {
       if (child.material) {
         for (const material of asMaterialArray(child.material)) {
           if (material.map) materialsWithMap += 1;
+          if (material.transparent) transparentMaterials += 1;
+          if (material.depthWrite) depthWriteMaterials += 1;
+          if (material.side === THREE.DoubleSide) doubleSidedMaterials += 1;
+          if (material.alphaHash) alphaHashMaterials += 1;
         }
       }
     });
@@ -502,6 +550,11 @@ export class ThreeSceneManager {
       vertices,
       meshesWithoutUv,
       materialsWithMap,
+      transparentMaterials,
+      depthWriteMaterials,
+      doubleSidedMaterials,
+      alphaHashMaterials,
+      reversedDepthBuffer: this.renderer?.capabilities?.reversedDepthBuffer === true,
       size: [size.x, size.y, size.z],
       center: [center.x, center.y, center.z],
       transform: this.lastModelOptions ?? null,
@@ -533,10 +586,62 @@ export class ThreeSceneManager {
     this.renderer.setSize(width, height, false);
   }
 
+  refreshSceneContentBounds() {
+    if (!this.THREE || !this.sceneContentBounds || !this.sceneContentSphere) return;
+    this.sceneContentBounds.makeEmpty();
+    for (const object of [this.box, this.objModel]) {
+      if (!object) continue;
+      object.updateMatrixWorld(true);
+      this.sceneContentBounds.expandByObject(object);
+    }
+    this.hasSceneContentBounds = !this.sceneContentBounds.isEmpty();
+    if (this.hasSceneContentBounds) this.sceneContentBounds.getBoundingSphere(this.sceneContentSphere);
+    this.updateCameraClipping(true);
+  }
+
+  updateCameraClipping(force = false) {
+    if (!this.camera) return;
+    let requiredFar = 5000;
+    let requiredNear = this.config.near ?? 0.1;
+    if (this.hasSceneContentBounds) {
+      requiredFar = calculateRequiredCameraFar(
+        [this.camera.position.x, this.camera.position.y, this.camera.position.z],
+        [this.sceneContentSphere.center.x, this.sceneContentSphere.center.y, this.sceneContentSphere.center.z],
+        this.sceneContentSphere.radius,
+      );
+      let protectedDistance = this.controls
+        ? this.camera.position.distanceTo(this.controls.target)
+        : Number.POSITIVE_INFINITY;
+      const planeInfo = this.mprPlaneOverlay?.getPlaneInfo?.();
+      if (planeInfo?.visible && planeInfo.centerThree) {
+        protectedDistance = Math.min(
+          protectedDistance,
+          this.camera.position.distanceTo(new this.THREE.Vector3(...planeInfo.centerThree)),
+        );
+      }
+      requiredNear = calculateRequiredCameraNear(
+        [this.camera.position.x, this.camera.position.y, this.camera.position.z],
+        [this.sceneContentSphere.center.x, this.sceneContentSphere.center.y, this.sceneContentSphere.center.z],
+        this.sceneContentSphere.radius,
+        this.config.near ?? 0.1,
+        protectedDistance,
+      );
+    } else if (this.controls) {
+      requiredFar = Math.max(requiredFar, this.camera.position.distanceTo(this.controls.target) * 2);
+    }
+    const farChange = Math.abs(requiredFar - this.camera.far) / Math.max(1, this.camera.far);
+    const nearChange = Math.abs(requiredNear - this.camera.near) / Math.max(0.001, this.camera.near);
+    if (!force && farChange < 0.02 && nearChange < 0.02) return;
+    this.camera.near = requiredNear;
+    this.camera.far = requiredFar;
+    this.camera.updateProjectionMatrix();
+  }
+
   animate() {
     if (!this.running) return;
     requestAnimationFrame(() => this.animate());
     if (this.controls) this.controls.update();
+    this.updateCameraClipping();
     this.updateHelpers();
     this.renderer.render(this.scene, this.camera);
   }
@@ -611,6 +716,27 @@ export function resolveLocalGltfResource(files, modelFile, requestedUrl) {
   if (exact) return exact.file;
   const expectedLower = expectedPath.toLowerCase();
   return normalizedFiles.find((entry) => entry.path.toLowerCase() === expectedLower)?.file ?? null;
+}
+
+export function calculateRequiredCameraFar(cameraPosition, contentCenter, contentRadius, minimumFar = 5000, padding = 1.1) {
+  const dx = cameraPosition[0] - contentCenter[0];
+  const dy = cameraPosition[1] - contentCenter[1];
+  const dz = cameraPosition[2] - contentCenter[2];
+  const distance = Math.hypot(dx, dy, dz);
+  const radius = Math.max(0, Number.isFinite(contentRadius) ? contentRadius : 0);
+  return Math.max(minimumFar, (distance + radius) * padding);
+}
+
+export function calculateRequiredCameraNear(cameraPosition, contentCenter, contentRadius, minimumNear = 0.1, protectedDistance = Number.POSITIVE_INFINITY) {
+  const dx = cameraPosition[0] - contentCenter[0];
+  const dy = cameraPosition[1] - contentCenter[1];
+  const dz = cameraPosition[2] - contentCenter[2];
+  const nearestContentDistance = Math.max(0, Math.hypot(dx, dy, dz) - Math.max(0, contentRadius));
+  const nearestProtectedDistance = Number.isFinite(protectedDistance)
+    ? Math.max(0, protectedDistance)
+    : Number.POSITIVE_INFINITY;
+  // 最も近い表示対象の25%までnearを前進させ、手前を切らずに深度分解能を確保する。
+  return Math.max(minimumNear, Math.min(nearestContentDistance, nearestProtectedDistance) * 0.25);
 }
 
 function normalizeLocalResourcePath(value) {

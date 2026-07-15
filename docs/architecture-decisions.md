@@ -103,9 +103,11 @@ MPR計算で得た`center / u / v / n`をVolume座標からThree.js座標へ変�
 
 MPR平面の中心と法線をshaderへ渡し、各fragmentと平面の符号付き距離に基づいて手前側のalphaを制御します。前景alpha、対象距離、フェード幅、完全切断を調整可能にします。
 
+通常のalpha blendでは単一mesh内の三角形を奥行き順に並べられないため、前景透過にはThree.jsのAlpha Hashを使用します。可視fragmentは通常どおりdepthを書き、確率的にdiscardされたfragmentからMPRを見せます。完全切断もalphaを0にするだけでなくdiscardとして処理します。
+
 ### 結果
 
-外観の文脈を残しつつ内部断面を表示できます。材質ごとのshader差異、透明描画順、深度処理は今後も検証対象です。
+外観の文脈を残しつつ内部断面を表示できます。透明objectの通常ソートに依存しないため、巨大な単一GLB内で内部面が外表面より前に合成される現象を抑制できます。Alpha Hash特有の粒状パターンは残るため、必要に応じてTAA等を検討します。
 
 ## ADR-006: GSを必須実装形式に固定しない
 
@@ -137,8 +139,28 @@ GSの採否や実装ライブラリを変更しても、MPRロジックと研究
 
 ### 判断
 
-OBJ／GLBの外観モデルは`MeshBasicMaterial`相当のUnlit表示を既定とします。GLBのbase color、texture、vertex color、alpha設定は可能な範囲で引き継ぎます。MPR前景透過はUnlit materialのshaderにも適用します。
+OBJ／GLBの外観モデルは`MeshBasicMaterial`相当のUnlit表示を既定とします。GLBのbase color、texture、vertex color、alpha設定は可能な範囲で引き継ぎます。通常表示はOpacity 1、前景透過OFF、両面描画、depth test／depth write有効とします。フォトグラメトリmeshは薄い開放面や局所的に向きが反転した三角形を含み得るため、`FrontSide`のback-face cullingで手前面を消さず、両面をdepthへ参加させます。MPR前景透過は必要時にUnlit materialのshaderへ適用します。
 
 ### 結果
 
 撮影済みtextureを照明条件に左右されず表示でき、Unity版のUnlit表示に近い外観になります。一方、動的な陰影による形状把握は弱くなるため、将来Lit表示を追加する場合は確認用の任意モードとして扱います。
+
+## ADR-008: Reverse-Zと動的clip範囲で深度精度を確保する
+
+### 状態
+
+採用済み
+
+### 背景
+
+PerspectiveCameraの深度精度はnear／farの比に依存し、farを固定するとズームアウト時にモデルが消え、単純にfarだけを拡大すると遠距離側の深度分解能が下がります。Three.js r166にはReverse-Z対応がありませんでした。
+
+### 判断
+
+Three.jsをr185へ更新し、`WebGLRenderer({ reversedDepthBuffer: true })`を使用します。`EXT_clip_control`対応GPUではReverse-Zを有効にし、未対応環境ではThree.js標準の通常depthへフォールバックします。
+
+同時に、モデル／Volumeのbounding sphereとカメラ距離からnear／farを毎フレーム調整します。farは最遠点より外側、nearは最寄り表示対象とMPRプレーンを切らない範囲で可能な限り前進させます。
+
+### 結果
+
+ズームアウト時のfar clippingを防ぎつつ、通常depthへフォールバックした環境でもnear／far比を抑えます。実データ`260108-3.glb`で、Reverse-Z有効、通常モデルdepth write有効、前景透過時Alpha Hash有効を確認済みです。

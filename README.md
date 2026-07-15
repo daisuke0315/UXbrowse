@@ -60,12 +60,13 @@ MPR注視点 = camera.position + camera.forward * MPR距離
 - DICOM / MHAボリューム読込後、Three.jsカメラ操作にMPRが追従します。
 - OBJ / GLBモデル読込後も、Three.jsカメラ操作はカメラ基準のMPR更新として動き続けます。
 - OBJ / GLBモデルは、撮影済みの外観色を照明で変化させないUnlit表示を既定とします。GLBのbase color、texture、vertex color、alpha設定は可能な範囲で引き継ぎます。
+- 通常表示は`Opacity = 1`、`前景透過 OFF`、両面描画、depth test／depth write有効を既定とします。フォトグラメトリmeshの薄い開放面や局所的な面向きの不整合を`FrontSide`で除外せず、手前面をdepthへ参加させます。Three.js r185のReverse-Zを対応GPUで使用し、near／farもモデルとカメラ距離へ動的に追随します。
 - Canvas上に生成したMPR画像は、Three.js空間内のMPRプレーンにもCanvasTextureとして重畳表示されます。
 - MPRプレーンは `plane.center / u / v / n` をVolume座標からThree.js座標へ変換し、断面と同じ位置・姿勢で配置されます。
 - MPRプレーンの表示、Opacity、境界線表示をMPRパネルから切り替えできます。
 - `モデル連動MPR` がONの場合、MPR中心は `camera.position + camera.forward * MPR距離` で生成します。モデル中心はMPR中心ではなく、デバッグ欄の `modelCenterThree` として確認します。
 - ズームでカメラ位置が動いた場合、MPR注視点とMPR断面も移動します。これはViewSync MPRの正規仕様です。
-- `MPRプレーン前景透過` がONの場合、MPRプレーンよりカメラ手前側にあるOBJ / GLBメッシュをshaderで半透明にします。
+- `MPRプレーン前景透過` がONの場合、MPRプレーンよりカメラ手前側にあるOBJ / GLBメッシュをshaderのAlpha Hashで間引きます。巨大な単一meshを通常の透明objectにせず、残るfragmentのdepth writeを維持します。
 - 前景透過の `前景Alpha`、`前景透過距離 mm`、`フェード幅 mm`、`完全切断` はMPRパネルから調整できます。`前景透過距離 = 0` の場合は、MPRプレーンよりカメラ手前側全体が透過対象です。
 - MPRプレーン側では `CT値しきい値透過` により、指定したCT値以下の画素を透明化できます。初期値は `-500` です。
 - `モデル連動MPR` をOFFにすると、MPR更新はカメラ基準へ戻ります。
@@ -120,7 +121,7 @@ Volumeと既に同じ座標系で作られたモデルをそのまま重ねた�
 
 GLB読込後も、通常のカメラ操作ではカメラ前方固定距離のMPRを更新します。外部texture付きGLBは`GLB＋テクスチャ選択`からフォルダごと選択してください。`モデル連動MPR` がONでも、MPR中心はモデル中心固定にはしません。モデル中心は `modelCenterThree` としてデバッグ表示し、MPR中心は `targetThree` / `targetVolume` として表示します。
 
-MPRプレーンがモデル内部に入り込む場合は、`前景透過` をONにしておくと、カメラ手前側のモデルだけが半透明になり、MPR断面を見やすくできます。`前景Alpha = 0` 又は `完全切断` で手前側をほぼ非表示にできます。前景透過は「プレーンから離れるほど不透明に戻す」のではなく、手前側を基本的に `前景Alpha` まで落とし、プレーン近傍だけ `フェード幅 mm` で滑らかに遷移させる実装です。
+MPRプレーンがモデル内部に入り込む場合は、`前景透過` をONにしておくと、カメラ手前側のモデルだけがAlpha Hashで間引かれ、MPR断面を見やすくできます。`前景Alpha = 0` 又は`完全切断`では手前側fragmentをdiscardします。通常のalpha blendと違い、GLB全体を`depthWrite = false`にしないため、単一mesh内の内部面が描画順だけで手前へ合成される問題を抑えます。
 
 可視光モデルの断面にCT/MHA由来MPRを直感的に重ねたい場合は、`CT値しきい値透過` をONにして、空気や低吸収域に相当する値を透明化してください。例えばCTなら `-500` 付近を初期確認値として使えます。
 
@@ -128,4 +129,4 @@ OBJは単体 `.obj` のみ対応です。`.mtl`、OBJ外部テクスチャ、複
 
 ## テスト
 
-`browser-mpr/tests.html` を開くと、ベクトル計算、直交性、座標変換、補間、Window処理、Three.js-Volume座標変換、MHA Loaderの最小単体テストを実行します。
+`tests.html`を開くと、ベクトル計算、直交性、座標変換、補間、Window処理、Three.js-Volume座標変換、カメラclip範囲、MHA Loaderの最小単体テストを実行します。

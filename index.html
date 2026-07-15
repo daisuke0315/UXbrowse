@@ -104,7 +104,7 @@
               注視点へ中心合わせ
             </label>
             <label>Scale <input id="objScale" type="number" min="0.001" step="0.1" value="1"></label>
-            <label>Opacity <input id="objOpacity" type="number" min="0.05" max="1" step="0.05" value="0.75"></label>
+            <label>Opacity <input id="objOpacity" type="number" min="0.05" max="1" step="0.05" value="1"></label>
             <label>注視点距離/MPR距離 <input id="objMprDistance" type="number" min="1" step="10" value="1500"></label>
             <div class="axis-grid">
               <span>位置</span>
@@ -193,7 +193,7 @@
               境界線表示
             </label>
             <label class="checkbox-label">
-              <input id="foregroundFadeToggle" type="checkbox" checked>
+              <input id="foregroundFadeToggle" type="checkbox">
               前景透過
             </label>
             <label>前景Alpha <input id="foregroundAlpha" type="number" min="0" max="1" step="0.05" value="0.15"></label>
@@ -235,6 +235,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=glb-folder-resources"></script>
+    <script type="module" src="./src/main.js?v=double-sided-depth"></script>
   </body>
 </html>

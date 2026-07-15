@@ -7,7 +7,7 @@ import { ValidationLogger } from "./ValidationLogger.js";
 import { formatVector } from "./math3d.js";
 import { volumeCenter } from "./VolumeGeometry.js";
 import { viewerConfig } from "./config/viewerConfig.js";
-import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=glb-folder-resources";
+import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=double-sided-depth";
 import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController } from "./three/DynamicMprController.js";
@@ -355,7 +355,7 @@ function getObjOptions() {
   return {
     centerToTarget: els.objCenterToggle.checked,
     scale: Math.max(0.001, readFloat(els.objScale, 1)),
-    opacity: Math.max(0.05, Math.min(1, readFloat(els.objOpacity, 0.75))),
+    opacity: Math.max(0.05, Math.min(1, readFloat(els.objOpacity, 1))),
     position,
     rotation,
     controlPosition,

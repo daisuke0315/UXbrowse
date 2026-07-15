@@ -63,7 +63,7 @@ X(i,j) = center + offsetU * u + offsetV * v
 Pdicom = threeToDicomMatrix * Pthree
 ```
 
-`threeToDicomMatrix` は [viewerConfig.js](/Users/daisuketanii/Library/Mobile%20Documents/com~apple~CloudDocs/splatClone/browser-mpr/src/config/viewerConfig.js) で一元管理します。点と方向ベクトルは分けて変換します。
+`threeToDicomMatrix` は [`src/config/viewerConfig.js`](../src/config/viewerConfig.js) で一元管理します。点と方向ベクトルは分けて変換します。
 
 ```javascript
 threePointToDicom(point)    // 平行移動を含む
@@ -82,4 +82,4 @@ Volume範囲BoxはDICOM/MHAボリュームの物理中心、物理寸法、方�
 
 重要: `origin` は先頭voxel中心のworld座標として扱います。そのためVolume中心やBoxの座標基準は `dimensions * spacing / 2` ではなく、voxel中心の範囲である `(dimensions - 1) * spacing / 2` です。これによりMPRでサンプルするCT/MHA画像座標と、Three.js上のモデル座標が同じworld座標を参照します。
 
-座標整合済みOBJ/GLBを読み込む場合は、モデル頂点がすでにVolume world座標にあるものとして扱います。`注視点へ中心合わせ` はOFF、`Scale = 1`、`位置 = [0,0,0]`、`回転 = [0,0,0]` にしてください。ONにするとモデルのバウンディングボックス中心を現在の注視点へ移動するため、元のCT/MHA座標は保持されません。
+座標整合済みOBJ/GLBを読み込む場合は、モデル頂点がすでにVolume world座標にあるものとして扱います。`注視点へ中心合わせ`はOFF、`Scale = 1`、`位置 = [0,0,0]`、`回転 = [0,0,0]`にしてください。ONにするとモデルのバウンディングボックス中心を現在の注視点へ移動するため、元のCT/MHA座標は保持されません。
