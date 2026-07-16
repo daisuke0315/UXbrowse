@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ViewSync MPR</title>
-    <link rel="stylesheet" href="./src/styles.css">
+    <link rel="stylesheet" href="./src/styles.css?v=modern-ui-20260715-3">
   </head>
   <body>
     <main class="app-shell">
@@ -15,9 +15,9 @@
             <desc id="brandDesc">A synchronized viewing plane crossing a three-dimensional volume.</desc>
             <defs>
               <linearGradient id="brandPlaneGradient" x1="8" y1="8" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-                <stop offset="0" stop-color="#38bdf8"/>
-                <stop offset="0.55" stop-color="#22c55e"/>
-                <stop offset="1" stop-color="#f59e0b"/>
+                <stop offset="0" stop-color="#67e8f9"/>
+                <stop offset="0.55" stop-color="#2dd4bf"/>
+                <stop offset="1" stop-color="#818cf8"/>
               </linearGradient>
             </defs>
             <path class="brand-volume" d="M24 4.5 40.5 14v20L24 43.5 7.5 34V14L24 4.5Z"/>
@@ -31,7 +31,9 @@
             <p id="statusText">DICOM CTシリーズを選択してください。</p>
           </div>
         </div>
-        <div class="file-actions">
+        <details class="file-menu">
+          <summary>データ読込</summary>
+          <div class="file-actions">
           <button id="demoVolumeBtn" type="button">デモファントム</button>
           <label class="file-button">
             OBJモデル
@@ -61,7 +63,8 @@
             DICOMフォルダ
             <input id="folderInput" type="file" multiple webkitdirectory>
           </label>
-        </div>
+          </div>
+        </details>
       </header>
 
       <section class="series-band" aria-label="シリーズ情報">
@@ -71,19 +74,29 @@
         <div><span>Value Range</span><strong id="huRange">-</strong></div>
       </section>
 
-      <section class="workspace">
+      <section class="workspace controls-collapsed">
+        <button id="controlsToggleBtn" class="controls-toggle" type="button" aria-expanded="false">For Specialist</button>
         <div class="viewer-pane">
           <div class="three-pane">
             <div id="threeViewport" class="three-viewport" aria-label="Three.js表示領域">
               <div class="three-placeholder">Three.jsを初期化中...</div>
             </div>
-          </div>
-          <div class="mpr-pane">
-            <canvas id="mprCanvas" width="512" height="512" aria-label="MPR画像"></canvas>
+            <div class="mpr-pane" aria-label="MPRサブ画面">
+              <div class="mpr-pane-header">
+                <strong>MPR</strong>
+                <div class="mpr-pane-actions">
+                  <button id="mprCollapseBtn" type="button" aria-pressed="false" aria-label="MPRを最小化">−</button>
+                  <button id="mprExpandBtn" type="button" aria-pressed="false" aria-label="MPRを拡大">拡大</button>
+                </div>
+              </div>
+              <canvas id="mprCanvas" width="512" height="512" aria-label="MPR画像"></canvas>
+            </div>
           </div>
         </div>
 
         <aside class="controls-pane">
+          <details class="control-group" open>
+            <summary>基本操作</summary>
           <fieldset>
             <legend>Dynamic</legend>
             <label class="checkbox-label">
@@ -93,6 +106,15 @@
             <label>更新間隔 ms <input id="updateInterval" type="number" min="16" step="16" value="80"></label>
           </fieldset>
 
+          <div class="control-row presets">
+            <button id="axialBtn" type="button">Axial</button>
+            <button id="coronalBtn" type="button">Coronal</button>
+            <button id="sagittalBtn" type="button">Sagittal</button>
+          </div>
+          </details>
+
+          <details class="control-group" open>
+            <summary>3Dモデル</summary>
           <fieldset>
             <legend>3Dモデル</legend>
             <label class="checkbox-label">
@@ -105,7 +127,7 @@
             </label>
             <label>Scale <input id="objScale" type="number" min="0.001" step="0.1" value="1"></label>
             <label>Opacity <input id="objOpacity" type="number" min="0.05" max="1" step="0.05" value="1"></label>
-            <label>注視点距離/MPR距離 <input id="objMprDistance" type="number" min="1" step="10" value="1500"></label>
+            <label>注視点距離/MPR距離 <input id="objMprDistance" type="number" min="1" step="10" value="1000"></label>
             <div class="axis-grid">
               <span>位置</span>
               <label>X <input id="objPosX" type="number" step="1" value="0"></label>
@@ -133,13 +155,10 @@
               <button id="resetVolumeFlipBtn" type="button">反転リセット</button>
             </div>
           </fieldset>
+          </details>
 
-          <div class="control-row presets">
-            <button id="axialBtn" type="button">Axial</button>
-            <button id="coronalBtn" type="button">Coronal</button>
-            <button id="sagittalBtn" type="button">Sagittal</button>
-          </div>
-
+          <details class="control-group">
+            <summary>カメラ詳細</summary>
           <fieldset>
             <legend>eye</legend>
             <div class="vector-grid" data-vector="eye"></div>
@@ -154,7 +173,10 @@
             <legend>up</legend>
             <div class="vector-grid" data-vector="up"></div>
           </fieldset>
+          </details>
 
+          <details class="control-group" open>
+            <summary>MPR・表示設定</summary>
           <fieldset>
             <legend>Window</legend>
             <label>WL <input id="windowLevel" type="number" step="1" value="40"></label>
@@ -193,14 +215,14 @@
               境界線表示
             </label>
             <label class="checkbox-label">
-              <input id="foregroundFadeToggle" type="checkbox">
+              <input id="foregroundFadeToggle" type="checkbox" checked>
               前景透過
             </label>
-            <label>前景Alpha <input id="foregroundAlpha" type="number" min="0" max="1" step="0.05" value="0.15"></label>
+            <label>前景Alpha <input id="foregroundAlpha" type="number" min="0" max="1" step="0.05" value="1"></label>
             <label>前景透過距離 mm <input id="foregroundDistance" type="number" min="0" max="2000" step="5" value="0"></label>
             <label>フェード幅 mm <input id="foregroundFadeWidth" type="number" min="0" max="100" step="1" value="10"></label>
             <label class="checkbox-label">
-              <input id="foregroundCutToggle" type="checkbox">
+              <input id="foregroundCutToggle" type="checkbox" checked>
               完全切断
             </label>
             <label class="checkbox-label">
@@ -220,6 +242,7 @@
               </select>
             </label>
           </fieldset>
+          </details>
 
           <div class="control-row">
             <button id="renderBtn" type="button">再計算</button>
@@ -228,13 +251,16 @@
         </aside>
       </section>
 
-      <section class="debug-band">
-        <pre id="debugInfo"></pre>
-        <pre id="logOutput"></pre>
-      </section>
+      <details class="debug-drawer">
+        <summary>デバッグ・ログ</summary>
+        <section class="debug-band">
+          <pre id="debugInfo"></pre>
+          <pre id="logOutput"></pre>
+        </section>
+      </details>
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=double-sided-depth"></script>
+    <script type="module" src="./src/main.js?v=performance-pass-3"></script>
   </body>
 </html>

@@ -1,5 +1,5 @@
 import { volumeCenter, volumeDisplaySpan, volumeVoxelCenterSpan } from "../VolumeGeometry.js";
-import { ModelVisibilityShaderController } from "./ModelVisibilityShaderController.js";
+import { ModelVisibilityShaderController } from "./ModelVisibilityShaderController.js?v=mpr-fov-clip-2";
 import { MprPlaneOverlay } from "./MprPlaneOverlay.js";
 
 export class ThreeSceneManager {
@@ -8,6 +8,12 @@ export class ThreeSceneManager {
     this.config = config;
     this.logger = logger;
     this.initialized = false;
+    this.running = false;
+    this.renderFrameId = null;
+    this.renderCount = 0;
+    this.qualityRestoreTimer = null;
+    this.controlsInteracting = false;
+    this.currentPixelRatio = 1;
     this.foregroundOptions = {
       enabled: false,
       frontAlpha: 0.15,
@@ -19,7 +25,7 @@ export class ThreeSceneManager {
   async init() {
     const start = performance.now();
     this.THREE = await import("../../vendor/three/three.module.js");
-    const { OrbitControls } = await import("../../vendor/three/OrbitControls.js");
+    const { OrbitControls } = await import("../../vendor/three/OrbitControls.js?v=unbounded-polar-2");
     const { OBJLoader } = await import("../../vendor/three/OBJLoader.js");
     const { GLTFLoader } = await import("../../vendor/three/GLTFLoader.js");
     this.OBJLoader = OBJLoader;
@@ -38,17 +44,43 @@ export class ThreeSceneManager {
       // EXT_clip_control対応環境では通常Zより高精度。未対応時はThree.jsが通常Zへ戻す。
       reversedDepthBuffer: true,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.renderer.setSize(this.container.clientWidth || 640, this.container.clientHeight || 420);
+    this.idlePixelRatio = Math.min(window.devicePixelRatio || 1, this.config.maxPixelRatio ?? 2);
+    this.interactivePixelRatio = Math.min(this.idlePixelRatio, this.config.interactivePixelRatio ?? 1);
+    this.currentPixelRatio = this.idlePixelRatio;
+    this.renderer.setPixelRatio(this.currentPixelRatio);
+    // 描画バッファだけを初期化し、表示サイズは親要素へ100%追従させる。
+    // setSizeの既定動作で固定pxのinline styleを残すと、レイアウト変更後に
+    // Canvasの表示比率とcamera.aspectがずれてモデルが横へ伸びて見える。
+    this.renderer.setSize(this.container.clientWidth || 640, this.container.clientHeight || 420, false);
     this.container.replaceChildren(this.renderer.domElement);
     this.renderer.domElement.className = "three-canvas";
+    this.renderer.domElement.dataset.pixelRatio = String(this.currentPixelRatio);
+    this.renderer.domElement.dataset.renderCount = "0";
+    this.renderer.domElement.style.width = "100%";
+    this.renderer.domElement.style.height = "100%";
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    // 左ドラッグの操作感を保ったまま、上下回転だけ極点を越えて継続できるようにする。
+    this.controls.enableUnboundedPolarRotation = true;
     this.controls.enableDamping = this.config.enableDamping;
     this.controls.dampingFactor = this.config.dampingFactor;
     this.controls.rotateSpeed = this.config.rotateSpeed;
     this.controls.panSpeed = this.config.panSpeed;
     this.controls.zoomSpeed = this.config.zoomSpeed;
+    this.controls.addEventListener("start", () => {
+      this.controlsInteracting = true;
+      this.useInteractivePixelRatio();
+      this.requestRender();
+    });
+    this.controls.addEventListener("change", () => {
+      this.useInteractivePixelRatio();
+      this.scheduleIdlePixelRatio();
+      this.requestRender();
+    });
+    this.controls.addEventListener("end", () => {
+      this.controlsInteracting = false;
+      this.scheduleIdlePixelRatio();
+    });
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x304050, 1.8));
     const light = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -60,6 +92,8 @@ export class ThreeSceneManager {
       new THREE.BoxGeometry(40, 40, 40),
       new THREE.MeshStandardMaterial({ color: 0x7dd3fc, roughness: 0.45, metalness: 0.05 })
     );
+    // 初期化確認用の水色Cube。実モデルと混同するため通常表示では非表示にする。
+    this.referenceCube.visible = false;
     this.scene.add(this.referenceCube);
     this.targetMarker = new THREE.Mesh(
       new THREE.SphereGeometry(4, 24, 16),
@@ -88,7 +122,7 @@ export class ThreeSceneManager {
     this.camera.lookAt(this.controls.target);
     this.controls.update();
     this.running = true;
-    this.animate();
+    this.requestRender();
     this.logger.info("Three.js初期化完了", {
       revision: THREE.REVISION,
       reversedDepthBuffer: this.renderer.capabilities.reversedDepthBuffer === true,
@@ -124,6 +158,8 @@ export class ThreeSceneManager {
       depthWrite: false,
     });
     this.box = new THREE.Mesh(geometry, material);
+    // Volume範囲は位置合わせ用の補助表示。通常観察ではモデルを隠すため既定は非表示にする。
+    this.box.visible = false;
     this.box.renderOrder = 0;
     const basis = new THREE.Matrix4().makeBasis(
       new THREE.Vector3(...rowThree),
@@ -154,6 +190,23 @@ export class ThreeSceneManager {
       displaySize: displaySize.map((v) => Number(v.toFixed(3))),
       center: centerThree.map((v) => Number(v.toFixed(2))),
     });
+    this.requestRender();
+  }
+
+  clearVolume() {
+    if (this.box) {
+      this.scene.remove(this.box);
+      this.box.geometry.dispose();
+      this.box.material.dispose();
+      this.box = null;
+    }
+    this.mapper = null;
+    this.dynamicFocusPoint = null;
+    this.mprPlaneOverlay?.setOptions({ visible: false });
+    this.foregroundOptions.enabled = false;
+    this.modelVisibility?.setOptions(this.foregroundOptions);
+    this.refreshSceneContentBounds();
+    this.requestRender();
   }
 
   async loadObjFile(file, options = {}) {
@@ -290,6 +343,7 @@ export class ThreeSceneManager {
           materials += 1;
         }
       });
+      this.requestRender();
       return { fileName: file.name, sourceFormat: this.objModel.userData.sourceFormat || null, flipY: texture.flipY, meshes, materials };
     } finally {
       URL.revokeObjectURL(url);
@@ -415,10 +469,11 @@ export class ThreeSceneManager {
     this.objModel.updateMatrixWorld(true);
     const summary = this.summarizeObject(this.objModel);
     this.refreshSceneContentBounds();
+    this.requestRender();
     return summary;
   }
 
-  getObjCameraInput(distance = 1500) {
+  getObjCameraInput(distance = 1000) {
     if (!this.objModel) return null;
     const THREE = this.THREE;
     this.objModel.updateMatrixWorld(true);
@@ -465,6 +520,7 @@ export class ThreeSceneManager {
     this.modelTexture = null;
     this.objModel = null;
     this.refreshSceneContentBounds();
+    this.requestRender();
     this.logger.info(`${sourceFormat}モデルを消去しました`);
   }
 
@@ -489,16 +545,22 @@ export class ThreeSceneManager {
     if (planeInfo) {
       this.modelVisibility.updatePlane({
         centerThree: planeInfo.centerThree,
+        uThree: planeInfo.uThree,
+        vThree: planeInfo.vThree,
         nThree: planeInfo.nThree,
+        widthMm: planeInfo.widthMm,
+        heightMm: planeInfo.heightMm,
       });
     }
     this.updateForegroundTransparency(options);
+    this.requestRender();
     return planeInfo;
   }
 
   updateOverlayOptions(options = {}) {
     this.mprPlaneOverlay?.setOptions(options);
     this.updateForegroundTransparency(options);
+    this.requestRender();
     return this.mprPlaneOverlay?.getPlaneInfo?.() ?? null;
   }
 
@@ -511,6 +573,7 @@ export class ThreeSceneManager {
     };
     this.modelVisibility.setOptions(this.foregroundOptions);
     if (this.objModel) this.modelVisibility.applyToObject(this.objModel, this.foregroundOptions);
+    this.requestRender();
   }
 
   summarizeObject(object) {
@@ -570,10 +633,12 @@ export class ThreeSceneManager {
   setDynamicFocusPoint(point) {
     if (!point) {
       this.dynamicFocusPoint = null;
+      this.requestRender();
       return;
     }
     this.dynamicFocusPoint ??= new this.THREE.Vector3();
     this.dynamicFocusPoint.set(point[0], point[1], point[2]);
+    this.requestRender();
   }
 
   resize() {
@@ -584,6 +649,9 @@ export class ThreeSceneManager {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    this.renderer.domElement.style.width = "100%";
+    this.renderer.domElement.style.height = "100%";
+    this.requestRender();
   }
 
   refreshSceneContentBounds() {
@@ -597,6 +665,7 @@ export class ThreeSceneManager {
     this.hasSceneContentBounds = !this.sceneContentBounds.isEmpty();
     if (this.hasSceneContentBounds) this.sceneContentBounds.getBoundingSphere(this.sceneContentSphere);
     this.updateCameraClipping(true);
+    this.requestRender();
   }
 
   updateCameraClipping(force = false) {
@@ -637,13 +706,39 @@ export class ThreeSceneManager {
     this.camera.updateProjectionMatrix();
   }
 
-  animate() {
+  requestRender() {
+    if (!this.running || this.renderFrameId !== null) return;
+    this.renderFrameId = requestAnimationFrame(() => this.renderFrame());
+  }
+
+  renderFrame() {
+    this.renderFrameId = null;
     if (!this.running) return;
-    requestAnimationFrame(() => this.animate());
     if (this.controls) this.controls.update();
     this.updateCameraClipping();
     this.updateHelpers();
     this.renderer.render(this.scene, this.camera);
+    this.renderCount += 1;
+    this.renderer.domElement.dataset.renderCount = String(this.renderCount);
+  }
+
+  useInteractivePixelRatio() {
+    if (!this.renderer || this.currentPixelRatio === this.interactivePixelRatio) return;
+    this.currentPixelRatio = this.interactivePixelRatio;
+    this.renderer.setPixelRatio(this.currentPixelRatio);
+    this.renderer.domElement.dataset.pixelRatio = String(this.currentPixelRatio);
+  }
+
+  scheduleIdlePixelRatio() {
+    if (this.qualityRestoreTimer !== null) clearTimeout(this.qualityRestoreTimer);
+    this.qualityRestoreTimer = setTimeout(() => {
+      this.qualityRestoreTimer = null;
+      if (this.controlsInteracting || !this.renderer || this.currentPixelRatio === this.idlePixelRatio) return;
+      this.currentPixelRatio = this.idlePixelRatio;
+      this.renderer.setPixelRatio(this.currentPixelRatio);
+      this.renderer.domElement.dataset.pixelRatio = String(this.currentPixelRatio);
+      this.requestRender();
+    }, this.config.qualityRestoreDelayMs ?? 180);
   }
 
   updateHelpers() {
@@ -673,7 +768,17 @@ export class ThreeSceneManager {
       max = Math.max(max, brightness);
       if (brightness > 20) nonBlack += 1;
     }
-    return { width, height, sampleSize: size, nonBlack, min, max };
+    return {
+      width,
+      height,
+      pixelRatio: this.renderer.getPixelRatio(),
+      renderScheduled: this.renderFrameId !== null,
+      renderCount: this.renderCount,
+      sampleSize: size,
+      nonBlack,
+      min,
+      max,
+    };
   }
 
   getObjSummary() {

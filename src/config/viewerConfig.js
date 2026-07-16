@@ -9,6 +9,9 @@ export const viewerConfig = {
     zoomSpeed: 0.9,
     enableDamping: true,
     dampingFactor: 0.08,
+    maxPixelRatio: 2,
+    interactivePixelRatio: 1,
+    qualityRestoreDelayMs: 180,
   },
   mapper: {
     // Identity means Three.js world units are DICOM patient-space millimeters.

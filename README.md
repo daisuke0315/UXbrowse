@@ -51,7 +51,7 @@ MPR注視点 = camera.position + camera.forward * MPR距離
 - `targetThree` / `targetVolume`: MPR注視点です。`camera-forward` 系の値として計算し、MPR断面中心になります。
 - `注視点距離/MPR距離`: カメラ位置からMPR注視点までの距離です。
 
-初期値はMPR距離`1500 mm`、MPR画像方向は`V反転 ON`です。`MPR UVリセット`を押した場合もこの初期状態へ戻ります。
+初期値はMPR距離`1000 mm`、MPR画像方向は`V反転 ON`です。`MPR UVリセット`を押した場合もこの初期状態へ戻ります。
 
 ## 現在の確定状態
 

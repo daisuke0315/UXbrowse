@@ -65,7 +65,7 @@ target = camera.position + camera.forward * MPR距離
 
 `OrbitControls.target`は回転中心、`modelCenter`は位置確認用の参照値として分離します。「モデル連動MPR」がONでも、モデル中心をMPR中心にはしません。
 
-現在の既定距離は`1500 mm`です。MPR textureの既定方向は、外観モデルとの表示方向を合わせるため`V反転 ON`とします。
+現在の既定距離は`1000 mm`です。MPR textureの既定方向は、外観モデルとの表示方向を合わせるため`V反転 ON`とします。
 
 ### 結果
 

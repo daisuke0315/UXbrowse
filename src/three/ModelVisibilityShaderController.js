@@ -8,6 +8,9 @@ export class ModelVisibilityShaderController {
     this.fadeWidth = 10;
     this.planeCenter = new THREE.Vector3();
     this.planeNormal = new THREE.Vector3(0, 0, 1);
+    this.planeU = new THREE.Vector3(1, 0, 0);
+    this.planeV = new THREE.Vector3(0, 1, 0);
+    this.planeHalfSize = new THREE.Vector2(1e20, 1e20);
   }
 
   setOptions({ enabled = this.enabled, frontAlpha = this.frontAlpha, foregroundDistance = this.foregroundDistance, fadeWidth = this.fadeWidth } = {}) {
@@ -21,9 +24,14 @@ export class ModelVisibilityShaderController {
     }
   }
 
-  updatePlane({ centerThree, nThree } = {}) {
+  updatePlane({ centerThree, uThree, vThree, nThree, widthMm, heightMm } = {}) {
     if (centerThree) this.planeCenter.set(...centerThree);
+    if (uThree) this.planeU.set(...uThree).normalize();
+    if (vThree) this.planeV.set(...vThree).normalize();
     if (nThree) this.planeNormal.set(...nThree).normalize();
+    if (Number.isFinite(widthMm) && Number.isFinite(heightMm)) {
+      this.planeHalfSize.set(Math.max(0, widthMm / 2), Math.max(0, heightMm / 2));
+    }
     for (const record of this.records.values()) this.updateRecordUniforms(record);
   }
 
@@ -55,6 +63,9 @@ export class ModelVisibilityShaderController {
       shader.uniforms.mprClipEnabled = { value: this.enabled };
       shader.uniforms.mprPlaneCenter = { value: this.planeCenter.clone() };
       shader.uniforms.mprPlaneNormal = { value: this.planeNormal.clone() };
+      shader.uniforms.mprPlaneU = { value: this.planeU.clone() };
+      shader.uniforms.mprPlaneV = { value: this.planeV.clone() };
+      shader.uniforms.mprPlaneHalfSize = { value: this.planeHalfSize.clone() };
       shader.uniforms.mprFrontAlpha = { value: this.frontAlpha };
       shader.uniforms.mprForegroundDistance = { value: this.foregroundDistance };
       shader.uniforms.mprFadeWidth = { value: this.fadeWidth };
@@ -80,9 +91,19 @@ export class ModelVisibilityShaderController {
         "float mprForegroundAlphaFactor = 1.0;",
         "if (mprClipEnabled) {",
         "  vec3 mprN = normalize(mprPlaneNormal);",
-        "  float d = dot(vMprWorldPosition - mprPlaneCenter, mprN);",
+        "  vec3 mprRelative = vMprWorldPosition - mprPlaneCenter;",
+        "  vec3 mprViewRay = vMprWorldPosition - cameraPosition;",
+        "  float mprRayDenominator = dot(mprViewRay, mprN);",
+        "  bool mprRayHitsPlane = abs(mprRayDenominator) > 0.000001;",
+        "  float mprRayT = mprRayHitsPlane ? dot(mprPlaneCenter - cameraPosition, mprN) / mprRayDenominator : -1.0;",
+        "  vec3 mprPlaneIntersection = cameraPosition + mprViewRay * mprRayT;",
+        "  vec3 mprProjected = mprPlaneIntersection - mprPlaneCenter;",
+        "  float mprU = abs(dot(mprProjected, normalize(mprPlaneU)));",
+        "  float mprV = abs(dot(mprProjected, normalize(mprPlaneV)));",
+        "  bool insideMprFov = mprRayHitsPlane && mprRayT > 0.0 && mprU <= mprPlaneHalfSize.x && mprV <= mprPlaneHalfSize.y;",
+        "  float d = dot(mprRelative, mprN);",
         "  float cameraD = dot(cameraPosition - mprPlaneCenter, mprN);",
-        "  if (d * cameraD > 0.0) {",
+        "  if (insideMprFov && d * cameraD > 0.0) {",
         "    float distanceFromPlane = abs(d);",
         "    float frontMask = mprForegroundDistance <= 0.0001 ? 1.0 : 1.0 - smoothstep(mprForegroundDistance, mprForegroundDistance + max(mprFadeWidth, 0.0001), distanceFromPlane);",
         "    float foregroundAlpha = mix(1.0, mprFrontAlpha, frontMask);",
@@ -101,6 +122,9 @@ export class ModelVisibilityShaderController {
           "uniform bool mprClipEnabled;",
           "uniform vec3 mprPlaneCenter;",
           "uniform vec3 mprPlaneNormal;",
+          "uniform vec3 mprPlaneU;",
+          "uniform vec3 mprPlaneV;",
+          "uniform vec2 mprPlaneHalfSize;",
           "uniform float mprFrontAlpha;",
           "uniform float mprForegroundDistance;",
           "uniform float mprFadeWidth;",
@@ -130,6 +154,9 @@ export class ModelVisibilityShaderController {
       shader.uniforms.mprClipEnabled.value = this.enabled;
       shader.uniforms.mprPlaneCenter.value.copy(this.planeCenter);
       shader.uniforms.mprPlaneNormal.value.copy(this.planeNormal);
+      shader.uniforms.mprPlaneU.value.copy(this.planeU);
+      shader.uniforms.mprPlaneV.value.copy(this.planeV);
+      shader.uniforms.mprPlaneHalfSize.value.copy(this.planeHalfSize);
       shader.uniforms.mprFrontAlpha.value = this.frontAlpha;
       shader.uniforms.mprForegroundDistance.value = this.foregroundDistance;
       shader.uniforms.mprFadeWidth.value = this.fadeWidth;
@@ -185,6 +212,9 @@ export class ModelVisibilityShaderController {
       fragmentPatched,
       planeCenter: [this.planeCenter.x, this.planeCenter.y, this.planeCenter.z],
       planeNormal: [this.planeNormal.x, this.planeNormal.y, this.planeNormal.z],
+      planeU: [this.planeU.x, this.planeU.y, this.planeU.z],
+      planeV: [this.planeV.x, this.planeV.y, this.planeV.z],
+      planeHalfSize: [this.planeHalfSize.x, this.planeHalfSize.y],
     };
   }
 }

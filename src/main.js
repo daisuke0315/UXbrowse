@@ -2,12 +2,12 @@ import { DicomLoader } from "./DicomLoader.js";
 import { MhaLoader } from "./MhaLoader.js";
 import { VolumeBuilder } from "./VolumeBuilder.js";
 import { MprPlaneCalculator } from "./MprPlaneCalculator.js";
-import { MprRenderer } from "./MprRenderer.js";
+import { MprRenderer } from "./MprRenderer.js?v=performance-pass-1";
 import { ValidationLogger } from "./ValidationLogger.js";
 import { formatVector } from "./math3d.js";
 import { volumeCenter } from "./VolumeGeometry.js";
-import { viewerConfig } from "./config/viewerConfig.js";
-import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=double-sided-depth";
+import { viewerConfig } from "./config/viewerConfig.js?v=performance-pass-1";
+import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=performance-pass-3";
 import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController } from "./three/DynamicMprController.js";
@@ -19,7 +19,7 @@ const mhaLoader = new MhaLoader(logger);
 const builder = new VolumeBuilder(logger);
 const renderer = new MprRenderer(logger);
 const planeCalculator = new MprPlaneCalculator();
-const DEFAULT_MPR_DISTANCE = 1500;
+const DEFAULT_MPR_DISTANCE = 1000;
 const DEFAULT_MPR_UV_FLIP = [1, -1];
 
 const state = {
@@ -53,12 +53,18 @@ const els = {
   textureInput: document.querySelector("#textureInput"),
   demoVolumeBtn: document.querySelector("#demoVolumeBtn"),
   statusText: document.querySelector("#statusText"),
+  fileMenu: document.querySelector(".file-menu"),
   seriesUid: document.querySelector("#seriesUid"),
   volumeDimensions: document.querySelector("#volumeDimensions"),
   volumeSpacing: document.querySelector("#volumeSpacing"),
   huRange: document.querySelector("#huRange"),
   threeViewport: document.querySelector("#threeViewport"),
+  workspace: document.querySelector(".workspace"),
+  controlsToggleBtn: document.querySelector("#controlsToggleBtn"),
   canvas: document.querySelector("#mprCanvas"),
+  mprPane: document.querySelector(".mpr-pane"),
+  mprCollapseBtn: document.querySelector("#mprCollapseBtn"),
+  mprExpandBtn: document.querySelector("#mprExpandBtn"),
   dynamicToggle: document.querySelector("#dynamicToggle"),
   updateInterval: document.querySelector("#updateInterval"),
   objCenterToggle: document.querySelector("#objCenterToggle"),
@@ -121,15 +127,18 @@ logger.subscribe(() => {
   els.logOutput.scrollTop = els.logOutput.scrollHeight;
 });
 
-els.fileInput.addEventListener("change", () => handleFiles(els.fileInput.files));
-els.folderInput.addEventListener("change", () => handleFiles(els.folderInput.files));
-els.mhaInput.addEventListener("change", () => handleMhaFile(els.mhaInput.files?.[0]));
-els.objInput.addEventListener("change", () => handleObjFile(els.objInput.files?.[0]));
-els.glbInput.addEventListener("change", () => handleGlbFile(els.glbInput.files?.[0]));
-els.glbFolderInput.addEventListener("change", () => handleGlbFolder(els.glbFolderInput.files));
-els.textureInput.addEventListener("change", () => handleTextureFile(els.textureInput.files?.[0]));
-els.demoVolumeBtn.addEventListener("click", () => loadDemoVolume());
+els.fileInput.addEventListener("change", () => runFromFileMenu(() => handleFiles(els.fileInput.files)));
+els.folderInput.addEventListener("change", () => runFromFileMenu(() => handleFiles(els.folderInput.files)));
+els.mhaInput.addEventListener("change", () => runFromFileMenu(() => handleMhaFile(els.mhaInput.files?.[0])));
+els.objInput.addEventListener("change", () => runFromFileMenu(() => handleObjFile(els.objInput.files?.[0])));
+els.glbInput.addEventListener("change", () => runFromFileMenu(() => handleGlbFile(els.glbInput.files?.[0])));
+els.glbFolderInput.addEventListener("change", () => runFromFileMenu(() => handleGlbFolder(els.glbFolderInput.files)));
+els.textureInput.addEventListener("change", () => runFromFileMenu(() => handleTextureFile(els.textureInput.files?.[0])));
+els.demoVolumeBtn.addEventListener("click", () => runFromFileMenu(loadDemoVolume));
 els.demoObjBtn.addEventListener("click", () => loadDemoObj());
+els.controlsToggleBtn.addEventListener("click", toggleControlsPane);
+els.mprCollapseBtn.addEventListener("click", toggleMprPaneCollapsed);
+els.mprExpandBtn.addEventListener("click", toggleMprPaneExpanded);
 els.renderBtn.addEventListener("click", render);
 els.resetBtn.addEventListener("click", resetView);
 els.clearObjBtn.addEventListener("click", () => {
@@ -183,6 +192,52 @@ initThree();
 updateAxisFlipButtons();
 updateMprUvFlipButtons();
 writeDiagnostics();
+
+function runFromFileMenu(action) {
+  els.fileMenu.open = false;
+  return action();
+}
+
+function toggleControlsPane() {
+  const collapsed = !els.workspace.classList.contains("controls-collapsed");
+  els.workspace.classList.toggle("controls-collapsed", collapsed);
+  els.controlsToggleBtn.setAttribute("aria-expanded", String(!collapsed));
+  els.controlsToggleBtn.textContent = collapsed ? "For Specialist" : "専門設定を閉じる";
+  if (!collapsed && !els.mprPane.classList.contains("is-collapsed")) {
+    els.mprPane.dataset.restoreAfterControls = "true";
+    setMprPaneCollapsed(true);
+  } else if (collapsed && els.mprPane.dataset.restoreAfterControls === "true") {
+    delete els.mprPane.dataset.restoreAfterControls;
+    setMprPaneCollapsed(false);
+  }
+}
+
+function toggleMprPaneCollapsed() {
+  const collapsed = !els.mprPane.classList.contains("is-collapsed");
+  delete els.mprPane.dataset.restoreAfterControls;
+  setMprPaneCollapsed(collapsed);
+}
+
+function setMprPaneCollapsed(collapsed) {
+  els.mprPane.classList.toggle("is-collapsed", collapsed);
+  els.mprPane.classList.remove("is-expanded");
+  els.mprCollapseBtn.setAttribute("aria-pressed", String(collapsed));
+  els.mprCollapseBtn.textContent = collapsed ? "+" : "−";
+  els.mprCollapseBtn.setAttribute("aria-label", collapsed ? "MPRを表示" : "MPRを最小化");
+  els.mprExpandBtn.setAttribute("aria-pressed", "false");
+  els.mprExpandBtn.textContent = "拡大";
+}
+
+function toggleMprPaneExpanded() {
+  const expanded = !els.mprPane.classList.contains("is-expanded");
+  els.mprPane.classList.remove("is-collapsed");
+  els.mprPane.classList.toggle("is-expanded", expanded);
+  els.mprCollapseBtn.setAttribute("aria-pressed", "false");
+  els.mprCollapseBtn.textContent = "−";
+  els.mprCollapseBtn.setAttribute("aria-label", "MPRを最小化");
+  els.mprExpandBtn.setAttribute("aria-pressed", String(expanded));
+  els.mprExpandBtn.textContent = expanded ? "縮小" : "拡大";
+}
 
 async function handleFiles(fileList) {
   const files = [...fileList];
@@ -243,6 +298,7 @@ async function handleObjFile(file) {
   try {
     els.statusText.textContent = `${file.name} を読込中...`;
     await state.threeScene.loadObjFile(file, getObjOptions());
+    clearDemoPhantomForModel();
     els.statusText.textContent = `OBJ読込完了: ${file.name}`;
     requestObjectLinkedMpr("obj-file");
     writeDiagnostics();
@@ -264,6 +320,7 @@ async function handleGlbFile(file) {
     els.statusText.textContent = `${file.name} を読込中...`;
     // GLBの色・texture・alpha設定を引き継ぎ、外観参照向けのUnlit materialへ変換する。
     await state.threeScene.loadGlbFile(file, getObjOptions());
+    clearDemoPhantomForModel();
     els.statusText.textContent = `GLB読込完了: ${file.name}`;
     requestObjectLinkedMpr("glb-file");
     writeDiagnostics();
@@ -285,6 +342,7 @@ async function handleGlbFolder(fileList) {
   try {
     els.statusText.textContent = `GLB＋テクスチャを読込中... (${files.length}ファイル)`;
     const summary = await state.threeScene.loadGlbFileSet(files, getObjOptions());
+    clearDemoPhantomForModel();
     els.statusText.textContent = `GLB＋テクスチャ読込完了: ${summary.fileName}`;
     requestObjectLinkedMpr("glb-folder");
     writeDiagnostics();
@@ -342,6 +400,7 @@ function loadDemoObj() {
     "f 4 1 5",
   ].join("\n");
   state.threeScene.loadObjText(obj, "demo_obj_pyramid.obj", getObjOptions());
+  clearDemoPhantomForModel();
   els.statusText.textContent = "モデルデモ読込完了";
   requestObjectLinkedMpr("obj-demo");
   writeDiagnostics();
@@ -485,6 +544,22 @@ function loadDemoVolume() {
   }
   els.statusText.textContent = "デモファントム読込完了";
   logger.info("デモファントムを生成しました", { dimensions: state.volume.metadata.dimensions, ms: Math.round(performance.now() - start) });
+}
+
+function clearDemoPhantomForModel() {
+  if (state.volume?.metadata?.sourceFormat !== "DEMO") return false;
+  state.volume = null;
+  state.result = null;
+  state.dynamicInfo = null;
+  state.dynamicController = null;
+  state.threeScene?.clearVolume();
+  drawPlaceholder("DICOM CTシリーズ又はMHAファイルを読み込んでください");
+  els.seriesUid.textContent = "-";
+  els.volumeDimensions.textContent = "-";
+  els.volumeSpacing.textContent = "-";
+  els.huRange.textContent = "-";
+  logger.info("モデル読込に伴いデモファントムを消去しました");
+  return true;
 }
 
 function render() {

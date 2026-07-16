@@ -40,6 +40,9 @@ const _plane = new Plane();
 const _TILT_LIMIT = Math.cos( 70 * MathUtils.DEG2RAD );
 
 const _v = new Vector3();
+const _previousOrbitDirection = new Vector3();
+const _nextOrbitDirection = new Vector3();
+const _orientationDelta = new Quaternion();
 const _twoPI = 2 * Math.PI;
 
 const _STATE = {
@@ -179,6 +182,15 @@ class OrbitControls extends Controls {
 		 * @default Math.PI
 		 */
 		this.maxPolarAngle = Math.PI;
+
+		/**
+		 * Allows vertical orbiting to continue across the poles. Mouse and touch
+		 * bindings stay identical to OrbitControls; only the polar stop is removed.
+		 *
+		 * @type {boolean}
+		 * @default false
+		 */
+		this.enableUnboundedPolarRotation = false;
 
 		/**
 		 * How far you can orbit horizontally, lower limit. If set, the interval `[ min, max ]`
@@ -390,6 +402,7 @@ class OrbitControls extends Controls {
 		 * @type {number}
 		 */
 		this.zoom0 = this.object.zoom;
+		this.up0 = this.object.up.clone();
 
 		this._cursorStyle = 'auto';
 
@@ -409,6 +422,7 @@ class OrbitControls extends Controls {
 		// current position in spherical coordinates
 		this._spherical = new Spherical();
 		this._sphericalDelta = new Spherical();
+		this._polarDirection = 1;
 
 		this._scale = 1;
 		this._panOffset = new Vector3();
@@ -602,6 +616,7 @@ class OrbitControls extends Controls {
 		this.target0.copy( this.target );
 		this.position0.copy( this.object.position );
 		this.zoom0 = this.object.zoom;
+		this.up0.copy( this.object.up );
 
 	}
 
@@ -614,6 +629,8 @@ class OrbitControls extends Controls {
 		this.target.copy( this.target0 );
 		this.object.position.copy( this.position0 );
 		this.object.zoom = this.zoom0;
+		this.object.up.copy( this.up0 );
+		this._polarDirection = 1;
 
 		this.object.updateProjectionMatrix();
 		this.dispatchEvent( _changeEvent );
@@ -690,6 +707,7 @@ class OrbitControls extends Controls {
 		const position = this.object.position;
 
 		_v.copy( position ).sub( this.target );
+		_previousOrbitDirection.copy( _v ).normalize();
 
 		// rotate offset to "y-axis-is-up" space
 		_v.applyQuaternion( this._quat );
@@ -740,10 +758,38 @@ class OrbitControls extends Controls {
 
 		}
 
-		// restrict phi to be between desired limits
-		this._spherical.phi = Math.max( this.minPolarAngle, Math.min( this.maxPolarAngle, this._spherical.phi ) );
+		if ( this.enableUnboundedPolarRotation ) {
 
-		this._spherical.makeSafe();
+			// Spherical coordinates normally stop at the poles. Reflect the polar
+			// angle and rotate the azimuth by PI so the camera continues along the
+			// same orbit. Flip both future input and remaining damping momentum.
+			while ( this._spherical.phi < 0 || this._spherical.phi > Math.PI ) {
+
+				if ( this._spherical.phi < 0 ) {
+
+					this._spherical.phi = - this._spherical.phi;
+
+				} else {
+
+					this._spherical.phi = _twoPI - this._spherical.phi;
+
+				}
+
+				this._spherical.theta += Math.PI;
+				this._polarDirection *= - 1;
+				this._sphericalDelta.phi *= - 1;
+
+			}
+
+			this._spherical.makeSafe();
+
+		} else {
+
+			// restrict phi to be between desired limits
+			this._spherical.phi = Math.max( this.minPolarAngle, Math.min( this.maxPolarAngle, this._spherical.phi ) );
+			this._spherical.makeSafe();
+
+		}
 
 
 		// move target to panned location
@@ -782,6 +828,17 @@ class OrbitControls extends Controls {
 
 		// rotate offset back to "camera-up-vector-is-up" space
 		_v.applyQuaternion( this._quatInverse );
+
+		if ( this.enableUnboundedPolarRotation && Math.abs( this._sphericalDelta.phi ) > _EPS ) {
+
+			// Carry the camera's visual up direction along the same arc as its
+			// position. Keeping a fixed world-up vector makes lookAt() singular at
+			// the poles and causes the image to flip even when position is continuous.
+			_nextOrbitDirection.copy( _v ).normalize();
+			_orientationDelta.setFromUnitVectors( _previousOrbitDirection, _nextOrbitDirection );
+			this.object.up.applyQuaternion( _orientationDelta ).normalize();
+
+		}
 
 		position.copy( this.target ).add( _v );
 
@@ -949,7 +1006,7 @@ class OrbitControls extends Controls {
 
 	_rotateUp( angle ) {
 
-		this._sphericalDelta.phi -= angle;
+		this._sphericalDelta.phi -= angle * this._polarDirection;
 
 	}
 
