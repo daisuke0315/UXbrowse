@@ -166,8 +166,7 @@ export class ModelVisibilityShaderController {
   updateMaterialRenderState(record) {
     const { material } = record;
     const useHashedForeground = this.enabled && material.opacity >= 1 && !record.originalTransparent;
-    // GLB全体をtransparent/depthWrite=falseにすると、単一mesh内の三角形はソートされず
-    // 内部面が外表面より前に合成される。Alpha Hashならdiscard後も通常の深度を書ける。
+    // 単一mesh内の三角形ソート破綻を避けるため、前景透過では深度を書けるAlpha Hashを使う。
     material.alphaHash = record.originalAlphaHash || useHashedForeground;
     material.transparent = record.originalTransparent || material.opacity < 1;
     material.depthWrite = material.transparent ? false : record.originalDepthWrite;
@@ -204,6 +203,7 @@ export class ModelVisibilityShaderController {
     return {
       enabled: this.enabled,
       frontAlpha: this.frontAlpha,
+      transparencyMode: this.enabled ? "alpha-hash" : "opaque",
       foregroundDistance: this.foregroundDistance,
       fadeWidth: this.fadeWidth,
       materialCount: this.records.size,

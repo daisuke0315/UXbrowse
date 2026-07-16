@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ViewSync MPR</title>
-    <link rel="stylesheet" href="./src/styles.css?v=modern-ui-20260715-3">
+    <link rel="stylesheet" href="./src/styles.css?v=mpr-fov-sliders-1">
   </head>
   <body>
     <main class="app-shell">
@@ -34,35 +34,58 @@
         <details class="file-menu">
           <summary>データ読込</summary>
           <div class="file-actions">
-          <button id="demoVolumeBtn" type="button">デモファントム</button>
-          <label class="file-button">
-            OBJモデル
-            <input id="objInput" type="file" accept=".obj,model/obj,text/plain">
-          </label>
-          <label class="file-button">
-            GLBモデル
-            <input id="glbInput" type="file" accept=".glb,model/gltf-binary">
-          </label>
-          <label class="file-button">
-            GLB＋テクスチャ選択
-            <input id="glbFolderInput" type="file" multiple webkitdirectory>
-          </label>
-          <label class="file-button">
-            テクスチャ画像
-            <input id="textureInput" type="file" accept="image/png,image/jpeg,image/webp">
-          </label>
-          <label class="file-button">
-            MHAファイル
-            <input id="mhaInput" type="file" accept=".mha">
-          </label>
-          <label class="file-button">
-            DICOMファイル
-            <input id="fileInput" type="file" multiple>
-          </label>
-          <label class="file-button">
-            DICOMフォルダ
-            <input id="folderInput" type="file" multiple webkitdirectory>
-          </label>
+            <section class="file-category file-category-volume" aria-labelledby="volumeDataHeading">
+              <div class="file-category-heading">
+                <span class="file-category-mark" aria-hidden="true"></span>
+                <div>
+                  <strong id="volumeDataHeading">DICOM / ボリューム</strong>
+                  <small>CT断面データを読み込む</small>
+                </div>
+              </div>
+              <div class="file-category-buttons">
+                <label class="file-button">
+                  DICOMフォルダ
+                  <input id="folderInput" type="file" multiple webkitdirectory>
+                </label>
+                <label class="file-button">
+                  DICOMファイル
+                  <input id="fileInput" type="file" multiple>
+                </label>
+                <label class="file-button">
+                  MHAファイル
+                  <input id="mhaInput" type="file" accept=".mha">
+                </label>
+                <button id="demoVolumeBtn" type="button">デモファントム</button>
+              </div>
+            </section>
+
+            <section class="file-category file-category-model" aria-labelledby="modelDataHeading">
+              <div class="file-category-heading">
+                <span class="file-category-mark" aria-hidden="true"></span>
+                <div>
+                  <strong id="modelDataHeading">3Dモデル</strong>
+                  <small>重畳する形状・テクスチャ</small>
+                </div>
+              </div>
+              <div class="file-category-buttons">
+                <label class="file-button">
+                  GLBモデル
+                  <input id="glbInput" type="file" accept=".glb,model/gltf-binary">
+                </label>
+                <label class="file-button">
+                  GLB＋テクスチャ
+                  <input id="glbFolderInput" type="file" multiple webkitdirectory>
+                </label>
+                <label class="file-button">
+                  OBJモデル
+                  <input id="objInput" type="file" accept=".obj,model/obj,text/plain">
+                </label>
+                <label class="file-button">
+                  テクスチャ画像
+                  <input id="textureInput" type="file" accept="image/png,image/jpeg,image/webp">
+                </label>
+              </div>
+            </section>
           </div>
         </details>
       </header>
@@ -95,7 +118,7 @@
         </div>
 
         <aside class="controls-pane">
-          <details class="control-group" open>
+          <details class="control-group">
             <summary>基本操作</summary>
           <fieldset>
             <legend>Dynamic</legend>
@@ -106,6 +129,18 @@
             <label>更新間隔 ms <input id="updateInterval" type="number" min="16" step="16" value="80"></label>
           </fieldset>
 
+          <fieldset>
+            <legend>操作感</legend>
+            <label class="range-control" for="panSensitivity">
+              <span>平行移動感度 <output id="panSensitivityValue" for="panSensitivity">0.20</output></span>
+              <input id="panSensitivity" type="range" min="0.1" max="1" step="0.05" value="0.2">
+            </label>
+            <label class="range-control" for="controlInertia">
+              <span>慣性 <output id="controlInertiaValue" for="controlInertia">0.80</output></span>
+              <input id="controlInertia" type="range" min="0" max="1" step="0.05" value="0.8">
+            </label>
+          </fieldset>
+
           <div class="control-row presets">
             <button id="axialBtn" type="button">Axial</button>
             <button id="coronalBtn" type="button">Coronal</button>
@@ -113,10 +148,10 @@
           </div>
           </details>
 
-          <details class="control-group" open>
-            <summary>3Dモデル</summary>
+          <details class="control-group">
+            <summary>可視光モデル</summary>
           <fieldset>
-            <legend>3Dモデル</legend>
+            <legend>可視光モデル</legend>
             <label class="checkbox-label">
               <input id="objMprToggle" type="checkbox" checked>
               モデル連動MPR
@@ -126,8 +161,11 @@
               注視点へ中心合わせ
             </label>
             <label>Scale <input id="objScale" type="number" min="0.001" step="0.1" value="1"></label>
-            <label>Opacity <input id="objOpacity" type="number" min="0.05" max="1" step="0.05" value="1"></label>
-            <label>注視点距離/MPR距離 <input id="objMprDistance" type="number" min="1" step="10" value="1000"></label>
+            <label class="range-control" for="objOpacity">
+              <span>Opacity <output id="objOpacityValue" for="objOpacity">1.00</output></span>
+              <input id="objOpacity" type="range" min="0.05" max="1" step="0.05" value="1">
+            </label>
+            <label>注視点距離/MPR距離 <input id="objMprDistance" type="number" min="1" step="10" value="600"></label>
             <div class="axis-grid">
               <span>位置</span>
               <label>X <input id="objPosX" type="number" step="1" value="0"></label>
@@ -146,15 +184,6 @@
             </div>
           </fieldset>
 
-          <fieldset>
-            <legend>CT座標反転</legend>
-            <div class="control-row">
-              <button id="flipVolumeXBtn" type="button" aria-pressed="false">X反転</button>
-              <button id="flipVolumeYBtn" type="button" aria-pressed="false">Y反転</button>
-              <button id="flipVolumeZBtn" type="button" aria-pressed="false">Z反転</button>
-              <button id="resetVolumeFlipBtn" type="button">反転リセット</button>
-            </div>
-          </fieldset>
           </details>
 
           <details class="control-group">
@@ -175,8 +204,18 @@
           </fieldset>
           </details>
 
-          <details class="control-group" open>
-            <summary>MPR・表示設定</summary>
+          <details class="control-group">
+            <summary>MPR / CT</summary>
+          <fieldset>
+            <legend>CT座標反転</legend>
+            <div class="control-row">
+              <button id="flipVolumeXBtn" type="button" aria-pressed="false">X反転</button>
+              <button id="flipVolumeYBtn" type="button" aria-pressed="false">Y反転</button>
+              <button id="flipVolumeZBtn" type="button" aria-pressed="false">Z反転</button>
+              <button id="resetVolumeFlipBtn" type="button">反転リセット</button>
+            </div>
+          </fieldset>
+
           <fieldset>
             <legend>Window</legend>
             <label>WL <input id="windowLevel" type="number" step="1" value="40"></label>
@@ -197,7 +236,19 @@
               <input id="mprPlaneToggle" type="checkbox" checked>
               MPRプレーン表示
             </label>
-            <label>MPRプレーンOpacity <input id="mprPlaneOpacity" type="number" min="0" max="1" step="0.05" value="1"></label>
+            <p class="control-subheading">重畳矩形</p>
+            <label class="range-control" for="mprFovWidth">
+              <span>重畳範囲 幅 <output id="mprFovWidthValue" for="mprFovWidth">512 mm</output></span>
+              <input id="mprFovWidth" type="range" min="50" max="1200" step="1" value="512">
+            </label>
+            <label class="range-control" for="mprFovHeight">
+              <span>重畳範囲 高さ <output id="mprFovHeightValue" for="mprFovHeight">512 mm</output></span>
+              <input id="mprFovHeight" type="range" min="50" max="1200" step="1" value="512">
+            </label>
+            <label class="range-control" for="mprPlaneOpacity">
+              <span>MPR Opacity <output id="mprPlaneOpacityValue" for="mprPlaneOpacity">1.00</output></span>
+              <input id="mprPlaneOpacity" type="range" min="0" max="1" step="0.05" value="1">
+            </label>
             <label>重畳方式
               <select id="mprPlaneMode">
                 <option value="world">World Plane</option>
@@ -206,9 +257,9 @@
             </label>
             <label>Camera Plane距離 mm <input id="mprCameraPlaneDistance" type="number" min="0" step="1" value="0"></label>
             <div class="control-row">
-              <button id="mprFlipUBtn" type="button" aria-pressed="false">MPR U反転</button>
-              <button id="mprFlipVBtn" type="button" aria-pressed="true">MPR V反転: ON</button>
-              <button id="mprFlipResetBtn" type="button">MPR UVリセット</button>
+              <button id="mprFlipUBtn" type="button" aria-pressed="false">重畳 U反転: OFF</button>
+              <button id="mprFlipVBtn" type="button" aria-pressed="true">重畳 V反転: ON</button>
+              <button id="mprFlipResetBtn" type="button">重畳 UVリセット</button>
             </div>
             <label class="checkbox-label">
               <input id="mprPlaneBoundaryToggle" type="checkbox" checked>
@@ -218,22 +269,28 @@
               <input id="foregroundFadeToggle" type="checkbox" checked>
               前景透過
             </label>
-            <label>前景Alpha <input id="foregroundAlpha" type="number" min="0" max="1" step="0.05" value="1"></label>
-            <label>前景透過距離 mm <input id="foregroundDistance" type="number" min="0" max="2000" step="5" value="0"></label>
-            <label>フェード幅 mm <input id="foregroundFadeWidth" type="number" min="0" max="100" step="1" value="10"></label>
-            <label class="checkbox-label">
-              <input id="foregroundCutToggle" type="checkbox" checked>
-              完全切断
+            <label class="range-control" for="foregroundAlpha">
+              <span>前景Alpha（0=切断） <output id="foregroundAlphaValue" for="foregroundAlpha">0.00</output></span>
+              <input id="foregroundAlpha" type="range" min="0" max="1" step="0.05" value="0">
+            </label>
+            <label class="range-control" for="foregroundDistance">
+              <span>前景透過距離 <output id="foregroundDistanceValue" for="foregroundDistance">0 mm</output></span>
+              <input id="foregroundDistance" type="range" min="0" max="2000" step="5" value="0">
+            </label>
+            <label class="range-control" for="foregroundFadeWidth">
+              <span>フェード幅 <output id="foregroundFadeWidthValue" for="foregroundFadeWidth">10 mm</output></span>
+              <input id="foregroundFadeWidth" type="range" min="0" max="100" step="1" value="10">
             </label>
             <label class="checkbox-label">
               <input id="mprThresholdAlphaToggle" type="checkbox" checked>
               CT値しきい値透過
             </label>
             <label>透過しきい値 <input id="mprTransparentThreshold" type="number" step="10" value="-500"></label>
-            <label>幅 <input id="mprWidth" type="number" min="32" max="2048" step="16" value="512"></label>
-            <label>高さ <input id="mprHeight" type="number" min="32" max="2048" step="16" value="512"></label>
-            <label>U mm/px <input id="spacingU" type="number" min="0.05" step="0.05" value="1"></label>
-            <label>V mm/px <input id="spacingV" type="number" min="0.05" step="0.05" value="1"></label>
+            <p class="control-subheading">画像生成詳細</p>
+            <label>解像度 幅px <input id="mprWidth" type="number" min="32" max="2048" step="16" value="512"></label>
+            <label>解像度 高さpx <input id="mprHeight" type="number" min="32" max="2048" step="16" value="512"></label>
+            <label>画素間隔 U <input id="spacingU" type="number" min="0.05" step="0.05" value="1"></label>
+            <label>画素間隔 V <input id="spacingV" type="number" min="0.05" step="0.05" value="1"></label>
             <label>法線移動 mm <input id="normalOffset" type="number" step="0.5" value="0"></label>
             <label>補間
               <select id="interpolation">
@@ -261,6 +318,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=performance-pass-3"></script>
+    <script type="module" src="./src/main.js?v=restore-alpha-hash-1"></script>
   </body>
 </html>

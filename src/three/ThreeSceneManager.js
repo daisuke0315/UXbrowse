@@ -1,6 +1,6 @@
 import { volumeCenter, volumeDisplaySpan, volumeVoxelCenterSpan } from "../VolumeGeometry.js";
-import { ModelVisibilityShaderController } from "./ModelVisibilityShaderController.js?v=mpr-fov-clip-2";
-import { MprPlaneOverlay } from "./MprPlaneOverlay.js";
+import { ModelVisibilityShaderController } from "./ModelVisibilityShaderController.js?v=restore-alpha-hash-1";
+import { MprPlaneOverlay } from "./MprPlaneOverlay.js?v=overlay-preview-2";
 
 export class ThreeSceneManager {
   constructor(container, config, logger) {
@@ -13,6 +13,7 @@ export class ThreeSceneManager {
     this.renderCount = 0;
     this.qualityRestoreTimer = null;
     this.controlsInteracting = false;
+    this.inertiaFramesRemaining = 0;
     this.currentPixelRatio = 1;
     this.foregroundOptions = {
       enabled: false,
@@ -25,7 +26,7 @@ export class ThreeSceneManager {
   async init() {
     const start = performance.now();
     this.THREE = await import("../../vendor/three/three.module.js");
-    const { OrbitControls } = await import("../../vendor/three/OrbitControls.js?v=unbounded-polar-2");
+    const { TrackballControls } = await import("../../vendor/three/TrackballControls.js?v=screen-space-pan-1");
     const { OBJLoader } = await import("../../vendor/three/OBJLoader.js");
     const { GLTFLoader } = await import("../../vendor/three/GLTFLoader.js");
     this.OBJLoader = OBJLoader;
@@ -59,16 +60,15 @@ export class ThreeSceneManager {
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
 
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    // 左ドラッグの操作感を保ったまま、上下回転だけ極点を越えて継続できるようにする。
-    this.controls.enableUnboundedPolarRotation = true;
-    this.controls.enableDamping = this.config.enableDamping;
-    this.controls.dampingFactor = this.config.dampingFactor;
+    // TrackballControlsは縦横とも現在の画面姿勢を基準に回転するため、
+    // カメラが横・裏向きでもドラッグ方向と回転方向がずれない。
+    this.controls = new TrackballControls(this.camera, this.renderer.domElement);
     this.controls.rotateSpeed = this.config.rotateSpeed;
-    this.controls.panSpeed = this.config.panSpeed;
     this.controls.zoomSpeed = this.config.zoomSpeed;
+    this.setInteractionOptions({ panSpeed: this.config.panSpeed, inertia: this.config.inertia });
     this.controls.addEventListener("start", () => {
       this.controlsInteracting = true;
+      this.inertiaFramesRemaining = 0;
       this.useInteractivePixelRatio();
       this.requestRender();
     });
@@ -79,6 +79,9 @@ export class ThreeSceneManager {
     });
     this.controls.addEventListener("end", () => {
       this.controlsInteracting = false;
+      const inertia = this.interactionOptions?.inertia ?? 0;
+      this.inertiaFramesRemaining = inertia > 0 ? Math.ceil(6 + inertia * 40) : 0;
+      if (this.inertiaFramesRemaining > 0) this.requestRender();
       this.scheduleIdlePixelRatio();
     });
 
@@ -473,7 +476,7 @@ export class ThreeSceneManager {
     return summary;
   }
 
-  getObjCameraInput(distance = 1000) {
+  getObjCameraInput(distance = 600) {
     if (!this.objModel) return null;
     const THREE = this.THREE;
     this.objModel.updateMatrixWorld(true);
@@ -564,10 +567,10 @@ export class ThreeSceneManager {
     return this.mprPlaneOverlay?.getPlaneInfo?.() ?? null;
   }
 
-  updateForegroundTransparency({ foregroundEnabled = false, frontAlpha = 0.15, foregroundDistance = 0, fadeWidth = 10, cutMode = false } = {}) {
+  updateForegroundTransparency({ foregroundEnabled = false, frontAlpha = 0, foregroundDistance = 0, fadeWidth = 10 } = {}) {
     this.foregroundOptions = {
       enabled: foregroundEnabled,
-      frontAlpha: cutMode ? 0 : frontAlpha,
+      frontAlpha,
       foregroundDistance,
       fadeWidth,
     };
@@ -630,6 +633,23 @@ export class ThreeSceneManager {
     this.controls.addEventListener("change", callback);
   }
 
+  setInteractionOptions({ panSpeed = this.controls?.panSpeed ?? 0.4, inertia = 0 } = {}) {
+    if (!this.controls) return null;
+    const nextPanSpeed = this.THREE.MathUtils.clamp(Number(panSpeed) || 0.4, 0.1, 1);
+    const nextInertia = this.THREE.MathUtils.clamp(Number(inertia) || 0, 0, 1);
+    this.controls.panSpeed = nextPanSpeed;
+    this.controls.staticMoving = nextInertia <= 0;
+    // TrackballControlsは値が大きいほど早く停止するため、UIの慣性値を反転する。
+    this.controls.dynamicDampingFactor = Math.max(0.05, 1 - nextInertia);
+    this.interactionOptions = { panSpeed: nextPanSpeed, inertia: nextInertia };
+    this.requestRender();
+    return { ...this.interactionOptions };
+  }
+
+  getInteractionSummary() {
+    return this.interactionOptions ? { ...this.interactionOptions } : null;
+  }
+
   setDynamicFocusPoint(point) {
     if (!point) {
       this.dynamicFocusPoint = null;
@@ -649,6 +669,7 @@ export class ThreeSceneManager {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    this.controls?.handleResize?.();
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
     this.requestRender();
@@ -720,6 +741,13 @@ export class ThreeSceneManager {
     this.renderer.render(this.scene, this.camera);
     this.renderCount += 1;
     this.renderer.domElement.dataset.renderCount = String(this.renderCount);
+    // TrackballControlsはpointermove自体では再描画を要求しない。
+    // 慣性OFFでもドラッグ中は更新し、慣性ONでは指を離した後も
+    // TrackballControlsの減衰が完了するまで描画を継続する。
+    if (!this.controlsInteracting && this.inertiaFramesRemaining > 0) {
+      this.inertiaFramesRemaining -= 1;
+    }
+    if (this.controlsInteracting || this.inertiaFramesRemaining > 0) this.requestRender();
   }
 
   useInteractivePixelRatio() {

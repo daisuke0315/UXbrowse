@@ -6,8 +6,8 @@ import { MprRenderer } from "./MprRenderer.js?v=performance-pass-1";
 import { ValidationLogger } from "./ValidationLogger.js";
 import { formatVector } from "./math3d.js";
 import { volumeCenter } from "./VolumeGeometry.js";
-import { viewerConfig } from "./config/viewerConfig.js?v=performance-pass-1";
-import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=performance-pass-3";
+import { viewerConfig } from "./config/viewerConfig.js?v=interaction-defaults-1";
+import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=restore-alpha-hash-1";
 import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController } from "./three/DynamicMprController.js";
@@ -19,7 +19,10 @@ const mhaLoader = new MhaLoader(logger);
 const builder = new VolumeBuilder(logger);
 const renderer = new MprRenderer(logger);
 const planeCalculator = new MprPlaneCalculator();
-const DEFAULT_MPR_DISTANCE = 1000;
+const DEFAULT_MPR_DISTANCE = 600;
+// MPRキャンバスは読影用の正表示を維持し、Three.js重畳面で生じる
+// CanvasTexture／裏面表示のU/V差だけをtexture座標で補正する。
+// The PiP monitor previews the actual overlay texture; only V is flipped by default.
 const DEFAULT_MPR_UV_FLIP = [1, -1];
 
 const state = {
@@ -67,10 +70,15 @@ const els = {
   mprExpandBtn: document.querySelector("#mprExpandBtn"),
   dynamicToggle: document.querySelector("#dynamicToggle"),
   updateInterval: document.querySelector("#updateInterval"),
+  panSensitivity: document.querySelector("#panSensitivity"),
+  panSensitivityValue: document.querySelector("#panSensitivityValue"),
+  controlInertia: document.querySelector("#controlInertia"),
+  controlInertiaValue: document.querySelector("#controlInertiaValue"),
   objCenterToggle: document.querySelector("#objCenterToggle"),
   objMprToggle: document.querySelector("#objMprToggle"),
   objScale: document.querySelector("#objScale"),
   objOpacity: document.querySelector("#objOpacity"),
+  objOpacityValue: document.querySelector("#objOpacityValue"),
   objMprDistance: document.querySelector("#objMprDistance"),
   objPosX: document.querySelector("#objPosX"),
   objPosY: document.querySelector("#objPosY"),
@@ -96,7 +104,12 @@ const els = {
   renderBtn: document.querySelector("#renderBtn"),
   resetBtn: document.querySelector("#resetBtn"),
   mprPlaneToggle: document.querySelector("#mprPlaneToggle"),
+  mprFovWidth: document.querySelector("#mprFovWidth"),
+  mprFovWidthValue: document.querySelector("#mprFovWidthValue"),
+  mprFovHeight: document.querySelector("#mprFovHeight"),
+  mprFovHeightValue: document.querySelector("#mprFovHeightValue"),
   mprPlaneOpacity: document.querySelector("#mprPlaneOpacity"),
+  mprPlaneOpacityValue: document.querySelector("#mprPlaneOpacityValue"),
   mprPlaneMode: document.querySelector("#mprPlaneMode"),
   mprCameraPlaneDistance: document.querySelector("#mprCameraPlaneDistance"),
   mprFlipUBtn: document.querySelector("#mprFlipUBtn"),
@@ -105,9 +118,11 @@ const els = {
   mprPlaneBoundaryToggle: document.querySelector("#mprPlaneBoundaryToggle"),
   foregroundFadeToggle: document.querySelector("#foregroundFadeToggle"),
   foregroundAlpha: document.querySelector("#foregroundAlpha"),
+  foregroundAlphaValue: document.querySelector("#foregroundAlphaValue"),
   foregroundDistance: document.querySelector("#foregroundDistance"),
+  foregroundDistanceValue: document.querySelector("#foregroundDistanceValue"),
   foregroundFadeWidth: document.querySelector("#foregroundFadeWidth"),
-  foregroundCutToggle: document.querySelector("#foregroundCutToggle"),
+  foregroundFadeWidthValue: document.querySelector("#foregroundFadeWidthValue"),
   mprThresholdAlphaToggle: document.querySelector("#mprThresholdAlphaToggle"),
   mprTransparentThreshold: document.querySelector("#mprTransparentThreshold"),
   axialBtn: document.querySelector("#axialBtn"),
@@ -135,6 +150,17 @@ els.glbInput.addEventListener("change", () => runFromFileMenu(() => handleGlbFil
 els.glbFolderInput.addEventListener("change", () => runFromFileMenu(() => handleGlbFolder(els.glbFolderInput.files)));
 els.textureInput.addEventListener("change", () => runFromFileMenu(() => handleTextureFile(els.textureInput.files?.[0])));
 els.demoVolumeBtn.addEventListener("click", () => runFromFileMenu(loadDemoVolume));
+document.addEventListener("pointerdown", (event) => {
+  if (els.fileMenu.open && !els.fileMenu.contains(event.target)) {
+    els.fileMenu.open = false;
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !els.fileMenu.open) return;
+  els.fileMenu.open = false;
+  els.fileMenu.querySelector("summary")?.focus();
+  event.preventDefault();
+});
 els.demoObjBtn.addEventListener("click", () => loadDemoObj());
 els.controlsToggleBtn.addEventListener("click", toggleControlsPane);
 els.mprCollapseBtn.addEventListener("click", toggleMprPaneCollapsed);
@@ -150,6 +176,9 @@ els.dynamicToggle.addEventListener("change", () => {
   if (state.volume) requestLinkedMpr("toggle");
 });
 els.updateInterval.addEventListener("change", () => installScheduler());
+for (const input of [els.panSensitivity, els.controlInertia]) {
+  input.addEventListener("input", applyInteractionControls);
+}
 els.objMprToggle.addEventListener("change", () => {
   if (els.objMprToggle.checked) requestObjectLinkedMpr("toggle-on");
   else requestLinkedMpr("model-toggle-off");
@@ -157,6 +186,7 @@ els.objMprToggle.addEventListener("change", () => {
 els.objCenterToggle.addEventListener("change", applyObjControls);
 els.objScale.addEventListener("change", applyObjControls);
 els.objOpacity.addEventListener("change", applyObjControls);
+els.objOpacity.addEventListener("input", applyVisualRangeControls);
 els.objMprDistance.addEventListener("change", () => requestObjectLinkedMpr("obj-distance"));
 for (const input of [els.objPosX, els.objPosY, els.objPosZ, els.objRotX, els.objRotY, els.objRotZ]) {
   input.addEventListener("input", applyObjControls);
@@ -169,8 +199,17 @@ els.resetVolumeFlipBtn.addEventListener("click", resetVolumeAxisFlip);
 els.mprFlipUBtn.addEventListener("click", () => toggleMprUvFlip(0));
 els.mprFlipVBtn.addEventListener("click", () => toggleMprUvFlip(1));
 els.mprFlipResetBtn.addEventListener("click", resetMprUvFlip);
-for (const input of [els.mprPlaneToggle, els.mprPlaneOpacity, els.mprPlaneMode, els.mprCameraPlaneDistance, els.mprPlaneBoundaryToggle, els.foregroundFadeToggle, els.foregroundAlpha, els.foregroundDistance, els.foregroundFadeWidth, els.foregroundCutToggle, els.mprThresholdAlphaToggle, els.mprTransparentThreshold]) {
+for (const input of [els.mprPlaneToggle, els.mprPlaneOpacity, els.mprPlaneMode, els.mprCameraPlaneDistance, els.mprPlaneBoundaryToggle, els.foregroundFadeToggle, els.foregroundAlpha, els.foregroundDistance, els.foregroundFadeWidth, els.mprThresholdAlphaToggle, els.mprTransparentThreshold]) {
   input.addEventListener("change", applyMprPlaneOverlayControls);
+}
+for (const input of [els.mprPlaneOpacity, els.foregroundAlpha, els.foregroundDistance, els.foregroundFadeWidth]) {
+  input.addEventListener("input", applyVisualRangeControls);
+}
+for (const input of [els.mprFovWidth, els.mprFovHeight]) {
+  input.addEventListener("input", applyMprFovControls);
+}
+for (const input of [els.mprWidth, els.mprHeight, els.spacingU, els.spacingV]) {
+  input.addEventListener("change", updateMprFovControlsFromInputs);
 }
 els.windowPreset.addEventListener("change", applyWindowPreset);
 els.axialBtn.addEventListener("click", () => applyPlanePreset("axial"));
@@ -191,6 +230,8 @@ for (const input of document.querySelectorAll("input, select")) {
 initThree();
 updateAxisFlipButtons();
 updateMprUvFlipButtons();
+updateVisualRangeOutputs();
+updateMprFovControlsFromInputs();
 writeDiagnostics();
 
 function runFromFileMenu(action) {
@@ -202,7 +243,7 @@ function toggleControlsPane() {
   const collapsed = !els.workspace.classList.contains("controls-collapsed");
   els.workspace.classList.toggle("controls-collapsed", collapsed);
   els.controlsToggleBtn.setAttribute("aria-expanded", String(!collapsed));
-  els.controlsToggleBtn.textContent = collapsed ? "For Specialist" : "専門設定を閉じる";
+  els.controlsToggleBtn.textContent = collapsed ? "For Specialist" : "For Everyone";
   if (!collapsed && !els.mprPane.classList.contains("is-collapsed")) {
     els.mprPane.dataset.restoreAfterControls = "true";
     setMprPaneCollapsed(true);
@@ -477,8 +518,8 @@ function updateMprUvFlipButtons() {
   const [u, v] = state.mprUvFlip;
   els.mprFlipUBtn.setAttribute("aria-pressed", String(u < 0));
   els.mprFlipVBtn.setAttribute("aria-pressed", String(v < 0));
-  els.mprFlipUBtn.textContent = `MPR U反転: ${u < 0 ? "ON" : "OFF"}`;
-  els.mprFlipVBtn.textContent = `MPR V反転: ${v < 0 ? "ON" : "OFF"}`;
+  els.mprFlipUBtn.textContent = `重畳 U反転: ${u < 0 ? "ON" : "OFF"}`;
+  els.mprFlipVBtn.textContent = `重畳 V反転: ${v < 0 ? "ON" : "OFF"}`;
 }
 
 function loadDemoVolume() {
@@ -727,6 +768,54 @@ function applyMprPlaneOverlayControls() {
   writeDiagnostics();
 }
 
+function applyInteractionControls() {
+  const panSpeed = readFloat(els.panSensitivity, viewerConfig.three.panSpeed);
+  const inertia = readFloat(els.controlInertia, viewerConfig.three.inertia);
+  els.panSensitivityValue.value = panSpeed.toFixed(2);
+  els.controlInertiaValue.value = inertia.toFixed(2);
+  state.threeScene?.setInteractionOptions({ panSpeed, inertia });
+  writeDiagnostics();
+}
+
+function applyVisualRangeControls(event) {
+  updateVisualRangeOutputs();
+  if (event?.currentTarget === els.objOpacity) applyObjControls();
+  else applyMprPlaneOverlayControls();
+}
+
+function updateVisualRangeOutputs() {
+  els.objOpacityValue.value = readFloat(els.objOpacity, 1).toFixed(2);
+  els.mprPlaneOpacityValue.value = readFloat(els.mprPlaneOpacity, 1).toFixed(2);
+  els.foregroundAlphaValue.value = readFloat(els.foregroundAlpha, 0).toFixed(2);
+  els.foregroundDistanceValue.value = `${Math.round(readFloat(els.foregroundDistance, 0))} mm`;
+  els.foregroundFadeWidthValue.value = `${Math.round(readFloat(els.foregroundFadeWidth, 10))} mm`;
+}
+
+function applyMprFovControls() {
+  const widthPx = Math.max(1, readInt(els.mprWidth, 512));
+  const heightPx = Math.max(1, readInt(els.mprHeight, 512));
+  const widthMm = readFloat(els.mprFovWidth, 512);
+  const heightMm = readFloat(els.mprFovHeight, 512);
+  els.spacingU.value = (widthMm / widthPx).toFixed(4);
+  els.spacingV.value = (heightMm / heightPx).toFixed(4);
+  updateMprFovOutputs(widthMm, heightMm);
+  if (state.volume) requestLinkedMpr("mpr-fov");
+  writeDiagnostics();
+}
+
+function updateMprFovControlsFromInputs() {
+  const widthMm = Math.max(50, Math.min(1200, readInt(els.mprWidth, 512) * readFloat(els.spacingU, 1)));
+  const heightMm = Math.max(50, Math.min(1200, readInt(els.mprHeight, 512) * readFloat(els.spacingV, 1)));
+  els.mprFovWidth.value = String(Math.round(widthMm));
+  els.mprFovHeight.value = String(Math.round(heightMm));
+  updateMprFovOutputs(widthMm, heightMm);
+}
+
+function updateMprFovOutputs(widthMm, heightMm) {
+  els.mprFovWidthValue.value = `${Math.round(widthMm)} mm`;
+  els.mprFovHeightValue.value = `${Math.round(heightMm)} mm`;
+}
+
 function updateMprPlaneOverlay(result, request) {
   if (!state.threeReady || !state.threeScene || !result || !request) return;
   state.threeScene.updateMprPlaneOverlay(els.canvas, result, request, getMprPlaneOverlayOptions());
@@ -742,10 +831,9 @@ function getMprPlaneOverlayOptions() {
     flipV: state.mprUvFlip[1] < 0,
     showBoundary: els.mprPlaneBoundaryToggle.checked,
     foregroundEnabled: els.foregroundFadeToggle.checked,
-    frontAlpha: Math.max(0, Math.min(1, readFloat(els.foregroundAlpha, 0.15))),
+    frontAlpha: Math.max(0, Math.min(1, readFloat(els.foregroundAlpha, 0))),
     foregroundDistance: Math.max(0, readFloat(els.foregroundDistance, 0)),
     fadeWidth: Math.max(0, readFloat(els.foregroundFadeWidth, 10)),
-    cutMode: els.foregroundCutToggle.checked,
     thresholdAlphaEnabled: els.mprThresholdAlphaToggle.checked,
     transparentThreshold: readFloat(els.mprTransparentThreshold, -500),
   };
@@ -864,6 +952,7 @@ function writeDiagnostics() {
     dynamicEnabled: els.dynamicToggle.checked,
     modelLinkedMpr: shouldUseObjectMpr(),
     threePixelStats: state.threeScene?.getPixelStats?.() ?? null,
+    interaction: state.threeScene?.getInteractionSummary?.() ?? null,
     modelSummary: state.threeScene?.getModelSummary?.() ?? state.threeScene?.getObjSummary?.() ?? null,
     mprPlaneOverlay: state.threeScene?.getMprPlaneOverlaySummary?.() ?? null,
     foregroundTransparency: state.threeScene?.getForegroundTransparencySummary?.() ?? null,

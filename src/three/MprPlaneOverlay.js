@@ -19,6 +19,14 @@ export class MprPlaneOverlay {
       ? this.computeCameraPose(sourcePose, camera, cameraPlaneDistance)
       : { ...sourcePose, displayMode: "world", widthScale: 1, depth: null };
     this.updateGeometry(result.width * request.spacingU * displayPose.widthScale, result.height * request.spacingV * displayPose.widthScale, { flipU, flipV });
+    const previewOrientation = this.computePreviewOrientation(displayPose, camera);
+    this.drawPreview(canvas, {
+      flipU: Boolean(flipU) !== previewOrientation.mirrorU,
+      flipV: Boolean(flipV) !== previewOrientation.mirrorV,
+      textureFlipU: flipU,
+      textureFlipV: flipV,
+      ...previewOrientation,
+    });
     this.applyPose(displayPose);
     this.lastPlaneInfo = this.createPlaneInfo(sourcePose, displayPose);
     this.texture.needsUpdate = true;
@@ -97,6 +105,47 @@ export class MprPlaneOverlay {
       transparentCount,
       totalPixels: result.pixels.length,
       transparentRatio: result.pixels.length > 0 ? transparentCount / result.pixels.length : 0,
+    };
+  }
+
+  computePreviewOrientation(displayPose, camera) {
+    if (!camera) return { mirrorU: false, mirrorV: false };
+    const cameraRight = new this.THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+    const cameraUp = new this.THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+    return {
+      mirrorU: displayPose.u.dot(cameraRight) < 0,
+      mirrorV: displayPose.v.dot(cameraUp) < 0,
+    };
+  }
+
+  drawPreview(canvas, {
+    flipU = false,
+    flipV = false,
+    textureFlipU = false,
+    textureFlipV = false,
+    mirrorU = false,
+    mirrorV = false,
+  } = {}) {
+    if (!canvas || !this.textureCanvas) return;
+    if (canvas.width !== this.textureCanvas.width) canvas.width = this.textureCanvas.width;
+    if (canvas.height !== this.textureCanvas.height) canvas.height = this.textureCanvas.height;
+    const context = canvas.getContext("2d");
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.translate(flipU ? canvas.width : 0, flipV ? canvas.height : 0);
+    context.scale(flipU ? -1 : 1, flipV ? -1 : 1);
+    context.drawImage(this.textureCanvas, 0, 0);
+    context.restore();
+    this.lastPreviewInfo = {
+      flipU,
+      flipV,
+      textureFlipU: Boolean(textureFlipU),
+      textureFlipV: Boolean(textureFlipV),
+      viewMirrorU: mirrorU,
+      viewMirrorV: mirrorV,
+      width: canvas.width,
+      height: canvas.height,
     };
   }
 
@@ -219,6 +268,7 @@ export class MprPlaneOverlay {
       opacity: this.opacity,
       showBoundary: this.showBoundary,
       thresholdAlpha: this.lastThresholdInfo ?? null,
+      preview: this.lastPreviewInfo ?? null,
       flipU: Boolean(this.flipU),
       flipV: Boolean(this.flipV),
       widthMm: this.widthMm,
