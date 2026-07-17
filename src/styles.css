@@ -625,6 +625,10 @@ summary:focus-visible {
   content: "▾";
 }
 
+.controls-pane [hidden] {
+  display: none;
+}
+
 .control-group > fieldset,
 .control-group > .control-row {
   margin: 8px;
@@ -659,6 +663,24 @@ summary:focus-visible {
   text-align: right;
 }
 
+.range-value-editor {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: #a9c1ca;
+  font-size: 11px;
+}
+
+.range-value-editor input {
+  width: 74px;
+  min-height: 28px;
+  padding: 3px 6px;
+  color: #dffcff;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .range-control input[type="range"] {
   width: 100%;
   accent-color: var(--accent);
@@ -673,6 +695,13 @@ summary:focus-visible {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+.control-hint {
+  margin: 4px 0 10px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 fieldset {
