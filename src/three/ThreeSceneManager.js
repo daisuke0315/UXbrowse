@@ -1,6 +1,7 @@
 import { volumeCenter, volumeDisplaySpan, volumeVoxelCenterSpan } from "../VolumeGeometry.js";
-import { ModelVisibilityShaderController } from "./ModelVisibilityShaderController.js?v=restore-alpha-hash-1";
+import { ModelVisibilityShaderController } from "./ModelVisibilityShaderController.js?v=oit-default-1";
 import { MprPlaneOverlay } from "./MprPlaneOverlay.js?v=overlay-preview-2";
+import { WeightedBlendedOitRenderer } from "./WeightedBlendedOitRenderer.js?v=oit-default-1";
 
 export class ThreeSceneManager {
   constructor(container, config, logger) {
@@ -20,6 +21,7 @@ export class ThreeSceneManager {
       frontAlpha: 0.15,
       foregroundDistance: 0,
       fadeWidth: 10,
+      transparencyMode: "auto",
     };
   }
 
@@ -98,18 +100,9 @@ export class ThreeSceneManager {
     // 初期化確認用の水色Cube。実モデルと混同するため通常表示では非表示にする。
     this.referenceCube.visible = false;
     this.scene.add(this.referenceCube);
-    this.targetMarker = new THREE.Mesh(
-      new THREE.SphereGeometry(4, 24, 16),
-      new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0x342000 })
-    );
-    this.scene.add(this.targetMarker);
-    this.sightLine = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
-      new THREE.LineBasicMaterial({ color: 0x64d2ff })
-    );
-    this.scene.add(this.sightLine);
     this.mprPlaneOverlay = new MprPlaneOverlay(THREE, this.scene);
     this.modelVisibility = new ModelVisibilityShaderController(THREE);
+    this.weightedOit = new WeightedBlendedOitRenderer(THREE, this.renderer, this.scene, this.camera);
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.container);
@@ -186,7 +179,6 @@ export class ThreeSceneManager {
       this.camera.lookAt(this.controls.target);
     }
     this.controls.update();
-    this.updateHelpers();
     this.refreshSceneContentBounds();
     this.logger.info("Volume範囲BoxをThree.jsへ配置", {
       voxelCenterSpan: voxelCenterSize.map((v) => Number(v.toFixed(3))),
@@ -204,7 +196,6 @@ export class ThreeSceneManager {
       this.box = null;
     }
     this.mapper = null;
-    this.dynamicFocusPoint = null;
     this.mprPlaneOverlay?.setOptions({ visible: false });
     this.foregroundOptions.enabled = false;
     this.modelVisibility?.setOptions(this.foregroundOptions);
@@ -573,6 +564,7 @@ export class ThreeSceneManager {
       frontAlpha,
       foregroundDistance,
       fadeWidth,
+      transparencyMode: "auto",
     };
     this.modelVisibility.setOptions(this.foregroundOptions);
     if (this.objModel) this.modelVisibility.applyToObject(this.objModel, this.foregroundOptions);
@@ -648,17 +640,6 @@ export class ThreeSceneManager {
 
   getInteractionSummary() {
     return this.interactionOptions ? { ...this.interactionOptions } : null;
-  }
-
-  setDynamicFocusPoint(point) {
-    if (!point) {
-      this.dynamicFocusPoint = null;
-      this.requestRender();
-      return;
-    }
-    this.dynamicFocusPoint ??= new this.THREE.Vector3();
-    this.dynamicFocusPoint.set(point[0], point[1], point[2]);
-    this.requestRender();
   }
 
   resize() {
@@ -737,8 +718,30 @@ export class ThreeSceneManager {
     if (!this.running) return;
     if (this.controls) this.controls.update();
     this.updateCameraClipping();
-    this.updateHelpers();
-    this.renderer.render(this.scene, this.camera);
+    const useOit = this.foregroundOptions.enabled
+      && this.foregroundOptions.frontAlpha > 0
+      && this.foregroundOptions.frontAlpha < 1
+      && this.weightedOit?.supported
+      && this.objModel;
+    if (useOit) {
+      const frontAlpha = this.foregroundOptions.frontAlpha;
+      this.modelVisibility.setRuntimeFrontAlpha(0);
+      try {
+        this.renderer.render(this.scene, this.camera);
+      } finally {
+        this.modelVisibility.setRuntimeFrontAlpha(frontAlpha);
+      }
+      this.weightedOit.render(this.objModel, {
+        frontAlpha,
+        planeCenter: this.modelVisibility.planeCenter.toArray(),
+        planeNormal: this.modelVisibility.planeNormal.toArray(),
+        planeU: this.modelVisibility.planeU.toArray(),
+        planeV: this.modelVisibility.planeV.toArray(),
+        planeHalfSize: this.modelVisibility.planeHalfSize.toArray(),
+      });
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
     this.renderCount += 1;
     this.renderer.domElement.dataset.renderCount = String(this.renderCount);
     // TrackballControlsはpointermove自体では再描画を要求しない。
@@ -767,14 +770,6 @@ export class ThreeSceneManager {
       this.renderer.domElement.dataset.pixelRatio = String(this.currentPixelRatio);
       this.requestRender();
     }, this.config.qualityRestoreDelayMs ?? 180);
-  }
-
-  updateHelpers() {
-    if (!this.targetMarker || !this.sightLine) return;
-    const focusPoint = this.dynamicFocusPoint ?? this.controls.target;
-    this.targetMarker.position.copy(focusPoint);
-    const points = [this.camera.position.clone(), focusPoint.clone()];
-    this.sightLine.geometry.setFromPoints(points);
   }
 
   getPixelStats(sampleSize = 64) {
@@ -822,7 +817,18 @@ export class ThreeSceneManager {
   }
 
   getForegroundTransparencySummary() {
-    return this.modelVisibility?.getSummary?.() ?? null;
+    const summary = this.modelVisibility?.getSummary?.() ?? null;
+    return summary ? {
+      ...summary,
+      requestedMode: "oit",
+      resolvedMode: this.weightedOit?.supported === true ? "oit" : "alphaHash",
+      oitSupported: this.weightedOit?.supported === true,
+      oitActive: this.foregroundOptions?.enabled === true
+        && this.foregroundOptions?.frontAlpha > 0
+        && this.foregroundOptions?.frontAlpha < 1
+        && this.weightedOit?.supported === true
+        && Boolean(this.objModel),
+    } : null;
   }
 }
 

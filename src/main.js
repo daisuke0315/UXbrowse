@@ -7,7 +7,7 @@ import { ValidationLogger } from "./ValidationLogger.js";
 import { formatVector } from "./math3d.js";
 import { volumeCenter } from "./VolumeGeometry.js";
 import { viewerConfig } from "./config/viewerConfig.js?v=interaction-defaults-1";
-import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=restore-alpha-hash-1";
+import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=no-focus-marker-1";
 import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController } from "./three/DynamicMprController.js";
@@ -37,6 +37,7 @@ const state = {
   dynamicInfo: null,
   volumeAxisFlip: [1, 1, 1],
   mprUvFlip: [...DEFAULT_MPR_UV_FLIP],
+  observationLocked: false,
   defaults: {
     eye: [0, 0, -500],
     target: [0, 0, 0],
@@ -63,7 +64,9 @@ const els = {
   huRange: document.querySelector("#huRange"),
   threeViewport: document.querySelector("#threeViewport"),
   workspace: document.querySelector(".workspace"),
+  controlsPane: document.querySelector(".controls-pane"),
   controlsToggleBtn: document.querySelector("#controlsToggleBtn"),
+  observationLockBtn: document.querySelector("#observationLockBtn"),
   canvas: document.querySelector("#mprCanvas"),
   mprPane: document.querySelector(".mpr-pane"),
   mprCollapseBtn: document.querySelector("#mprCollapseBtn"),
@@ -74,8 +77,6 @@ const els = {
   panSensitivityValue: document.querySelector("#panSensitivityValue"),
   controlInertia: document.querySelector("#controlInertia"),
   controlInertiaValue: document.querySelector("#controlInertiaValue"),
-  objCenterToggle: document.querySelector("#objCenterToggle"),
-  objMprToggle: document.querySelector("#objMprToggle"),
   objScale: document.querySelector("#objScale"),
   objOpacity: document.querySelector("#objOpacity"),
   objOpacityValue: document.querySelector("#objOpacityValue"),
@@ -101,8 +102,6 @@ const els = {
   spacingV: document.querySelector("#spacingV"),
   normalOffset: document.querySelector("#normalOffset"),
   interpolation: document.querySelector("#interpolation"),
-  renderBtn: document.querySelector("#renderBtn"),
-  resetBtn: document.querySelector("#resetBtn"),
   mprPlaneToggle: document.querySelector("#mprPlaneToggle"),
   mprFovWidth: document.querySelector("#mprFovWidth"),
   mprFovWidthValue: document.querySelector("#mprFovWidthValue"),
@@ -163,10 +162,9 @@ document.addEventListener("keydown", (event) => {
 });
 els.demoObjBtn.addEventListener("click", () => loadDemoObj());
 els.controlsToggleBtn.addEventListener("click", toggleControlsPane);
+els.observationLockBtn.addEventListener("click", toggleObservationLock);
 els.mprCollapseBtn.addEventListener("click", toggleMprPaneCollapsed);
 els.mprExpandBtn.addEventListener("click", toggleMprPaneExpanded);
-els.renderBtn.addEventListener("click", render);
-els.resetBtn.addEventListener("click", resetView);
 els.clearObjBtn.addEventListener("click", () => {
   state.threeScene?.clearObjModel();
   writeDiagnostics();
@@ -176,14 +174,15 @@ els.dynamicToggle.addEventListener("change", () => {
   if (state.volume) requestLinkedMpr("toggle");
 });
 els.updateInterval.addEventListener("change", () => installScheduler());
+els.controlsPane.addEventListener("wheel", (event) => {
+  const input = event.target instanceof HTMLInputElement ? event.target : null;
+  if (input?.type !== "number") return;
+  event.preventDefault();
+  els.controlsPane.scrollTop += event.deltaY;
+}, { passive: false });
 for (const input of [els.panSensitivity, els.controlInertia]) {
   input.addEventListener("input", applyInteractionControls);
 }
-els.objMprToggle.addEventListener("change", () => {
-  if (els.objMprToggle.checked) requestObjectLinkedMpr("toggle-on");
-  else requestLinkedMpr("model-toggle-off");
-});
-els.objCenterToggle.addEventListener("change", applyObjControls);
 els.objScale.addEventListener("change", applyObjControls);
 els.objOpacity.addEventListener("change", applyObjControls);
 els.objOpacity.addEventListener("input", applyVisualRangeControls);
@@ -240,6 +239,7 @@ function runFromFileMenu(action) {
 }
 
 function toggleControlsPane() {
+  if (state.observationLocked) return;
   const collapsed = !els.workspace.classList.contains("controls-collapsed");
   els.workspace.classList.toggle("controls-collapsed", collapsed);
   els.controlsToggleBtn.setAttribute("aria-expanded", String(!collapsed));
@@ -250,6 +250,40 @@ function toggleControlsPane() {
   } else if (collapsed && els.mprPane.dataset.restoreAfterControls === "true") {
     delete els.mprPane.dataset.restoreAfterControls;
     setMprPaneCollapsed(false);
+  }
+}
+
+function toggleObservationLock() {
+  const locking = !state.observationLocked;
+  if (locking && !els.workspace.classList.contains("controls-collapsed")) toggleControlsPane();
+  state.observationLocked = locking;
+  els.workspace.classList.toggle("observation-locked", locking);
+  els.fileMenu.classList.toggle("is-locked", locking);
+  els.fileMenu.open = false;
+  els.fileMenu.inert = locking;
+  els.fileMenu.querySelector("summary")?.setAttribute("aria-disabled", String(locking));
+  els.controlsToggleBtn.disabled = locking;
+  setContainerControlsLocked(els.controlsPane, locking);
+  setContainerControlsLocked(els.fileMenu, locking);
+  els.observationLockBtn.setAttribute("aria-pressed", String(locking));
+  els.observationLockBtn.setAttribute("aria-label", locking ? "観察モードを解除" : "現在の状態をロック");
+  els.observationLockBtn.title = locking ? "観察モードを解除" : "現在の状態をロック";
+  if (!locking && state.volume) {
+    if (shouldUseObjectMpr()) requestObjectLinkedMpr("observation-unlock");
+    else requestLinkedMpr("observation-unlock");
+  }
+  writeDiagnostics();
+}
+
+function setContainerControlsLocked(container, locked) {
+  for (const control of container.querySelectorAll("input, select, button")) {
+    if (locked) {
+      control.dataset.beforeObservationLockDisabled = String(control.disabled);
+      control.disabled = true;
+    } else {
+      control.disabled = control.dataset.beforeObservationLockDisabled === "true";
+      delete control.dataset.beforeObservationLockDisabled;
+    }
   }
 }
 
@@ -440,7 +474,10 @@ function loadDemoObj() {
     "f 3 4 5",
     "f 4 1 5",
   ].join("\n");
-  state.threeScene.loadObjText(obj, "demo_obj_pyramid.obj", getObjOptions());
+  state.threeScene.loadObjText(obj, "demo_obj_pyramid.obj", {
+    ...getObjOptions(),
+    centerToTarget: true,
+  });
   clearDemoPhantomForModel();
   els.statusText.textContent = "モデルデモ読込完了";
   requestObjectLinkedMpr("obj-demo");
@@ -453,7 +490,7 @@ function getObjOptions() {
   const position = applyAxisFlipToVector(controlPosition);
   const rotation = applyAxisFlipToVector(controlRotation);
   return {
-    centerToTarget: els.objCenterToggle.checked,
+    centerToTarget: false,
     scale: Math.max(0.001, readFloat(els.objScale, 1)),
     opacity: Math.max(0.05, Math.min(1, readFloat(els.objOpacity, 1))),
     position,
@@ -690,7 +727,7 @@ async function initThree() {
 
 function installScheduler() {
   state.scheduler = new MprUpdateScheduler((reason) => {
-    if (!state.volume || !state.dynamicController) return;
+    if (state.observationLocked || !state.volume || !state.dynamicController) return;
     if (shouldUseObjectMpr()) {
       const objInput = state.threeScene.getObjCameraInput(readFloat(els.objMprDistance, DEFAULT_MPR_DISTANCE));
       state.dynamicController.updateFromThreeInput(state.volume, objInput, reason);
@@ -714,7 +751,6 @@ function configureThreeForVolume(volume, { preserveCamera = false } = {}) {
     onResult: (info) => {
       state.dynamicInfo = info;
       state.result = info.result;
-      state.threeScene?.setDynamicFocusPoint(info.threeInput.target);
       setVector("eye", info.dicomInput.eye);
       setVector("target", info.dicomInput.target);
       setVector("up", info.dicomInput.up);
@@ -736,7 +772,7 @@ function updateMapperForVolume(volume) {
 }
 
 function requestDynamicMpr(reason) {
-  if (!state.volume || !state.dynamicController) return;
+  if (state.observationLocked || !state.volume || !state.dynamicController) return;
   state.scheduler?.request(reason);
 }
 
@@ -749,7 +785,7 @@ function requestObjectLinkedMpr(reason) {
 }
 
 function shouldUseObjectMpr() {
-  return Boolean(els.objMprToggle.checked && state.threeScene?.getObjSummary?.());
+  return Boolean(state.threeScene?.getObjSummary?.());
 }
 
 function applyPlanePreset(name) {
@@ -857,21 +893,6 @@ function applyWindowPreset() {
   render();
 }
 
-function resetView() {
-  setVector("eye", state.defaults.eye);
-  setVector("target", state.defaults.target);
-  setVector("up", state.defaults.up);
-  els.windowLevel.value = state.defaults.wl;
-  els.windowWidth.value = state.defaults.ww;
-  els.mprWidth.value = 512;
-  els.mprHeight.value = 512;
-  els.spacingU.value = 1;
-  els.spacingV.value = 1;
-  els.normalOffset.value = 0;
-  els.interpolation.value = "linear";
-  render();
-}
-
 function updateSeriesInfo() {
   const m = state.volume.metadata;
   els.seriesUid.textContent = compactUid(m.seriesInstanceUid || m.sourceFileName || m.sourceFormat);
@@ -950,6 +971,7 @@ function writeDiagnostics() {
     volumeScalarType: state.volume?.metadata.scalarType ?? null,
     seriesInstanceUid: state.volume?.metadata.seriesInstanceUid ?? null,
     dynamicEnabled: els.dynamicToggle.checked,
+    observationLocked: state.observationLocked,
     modelLinkedMpr: shouldUseObjectMpr(),
     threePixelStats: state.threeScene?.getPixelStats?.() ?? null,
     interaction: state.threeScene?.getInteractionSummary?.() ?? null,
@@ -969,7 +991,7 @@ function createVectorInputs(name, initial) {
     const input = document.createElement("input");
     input.type = "number";
     input.step = "0.1";
-    input.value = initial[index];
+    input.value = Number(initial[index]).toFixed(3);
     input.dataset.vectorInput = name;
     input.dataset.axis = String(index);
     label.append(input);

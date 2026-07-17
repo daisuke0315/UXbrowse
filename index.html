@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ViewSync MPR</title>
-    <link rel="stylesheet" href="./src/styles.css?v=mpr-fov-sliders-1">
+    <link rel="stylesheet" href="./src/styles.css?v=icon-lock-svg-1">
   </head>
   <body>
     <main class="app-shell">
@@ -99,6 +99,14 @@
 
       <section class="workspace controls-collapsed">
         <button id="controlsToggleBtn" class="controls-toggle" type="button" aria-expanded="false">For Specialist</button>
+        <button id="observationLockBtn" class="observation-lock" type="button" aria-pressed="false" aria-label="現在の状態をロック" title="現在の状態をロック">
+          <svg class="lock-icon lock-icon-closed" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12v10H6z"/>
+          </svg>
+          <svg class="lock-icon lock-icon-open" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 10V7a5 5 0 0 1 9.5-2M6 10h12v10H6z"/>
+          </svg>
+        </button>
         <div class="viewer-pane">
           <div class="three-pane">
             <div id="threeViewport" class="three-viewport" aria-label="Three.js表示領域">
@@ -152,14 +160,6 @@
             <summary>可視光モデル</summary>
           <fieldset>
             <legend>可視光モデル</legend>
-            <label class="checkbox-label">
-              <input id="objMprToggle" type="checkbox" checked>
-              モデル連動MPR
-            </label>
-            <label class="checkbox-label">
-              <input id="objCenterToggle" type="checkbox">
-              注視点へ中心合わせ
-            </label>
             <label>Scale <input id="objScale" type="number" min="0.001" step="0.1" value="1"></label>
             <label class="range-control" for="objOpacity">
               <span>Opacity <output id="objOpacityValue" for="objOpacity">1.00</output></span>
@@ -182,6 +182,26 @@
               <button id="demoObjBtn" type="button">モデルデモ</button>
               <button id="clearObjBtn" type="button">モデル消去</button>
             </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>前景透過</legend>
+            <label class="checkbox-label">
+              <input id="foregroundFadeToggle" type="checkbox" checked>
+              前景透過
+            </label>
+            <label class="range-control" for="foregroundAlpha">
+              <span>前景Alpha（0=切断） <output id="foregroundAlphaValue" for="foregroundAlpha">0.00</output></span>
+              <input id="foregroundAlpha" type="range" min="0" max="1" step="0.05" value="0">
+            </label>
+            <label class="range-control" for="foregroundDistance">
+              <span>前景透過距離 <output id="foregroundDistanceValue" for="foregroundDistance">0 mm</output></span>
+              <input id="foregroundDistance" type="range" min="0" max="2000" step="5" value="0">
+            </label>
+            <label class="range-control" for="foregroundFadeWidth">
+              <span>フェード幅 <output id="foregroundFadeWidthValue" for="foregroundFadeWidth">10 mm</output></span>
+              <input id="foregroundFadeWidth" type="range" min="0" max="100" step="1" value="10">
+            </label>
           </fieldset>
 
           </details>
@@ -266,22 +286,6 @@
               境界線表示
             </label>
             <label class="checkbox-label">
-              <input id="foregroundFadeToggle" type="checkbox" checked>
-              前景透過
-            </label>
-            <label class="range-control" for="foregroundAlpha">
-              <span>前景Alpha（0=切断） <output id="foregroundAlphaValue" for="foregroundAlpha">0.00</output></span>
-              <input id="foregroundAlpha" type="range" min="0" max="1" step="0.05" value="0">
-            </label>
-            <label class="range-control" for="foregroundDistance">
-              <span>前景透過距離 <output id="foregroundDistanceValue" for="foregroundDistance">0 mm</output></span>
-              <input id="foregroundDistance" type="range" min="0" max="2000" step="5" value="0">
-            </label>
-            <label class="range-control" for="foregroundFadeWidth">
-              <span>フェード幅 <output id="foregroundFadeWidthValue" for="foregroundFadeWidth">10 mm</output></span>
-              <input id="foregroundFadeWidth" type="range" min="0" max="100" step="1" value="10">
-            </label>
-            <label class="checkbox-label">
               <input id="mprThresholdAlphaToggle" type="checkbox" checked>
               CT値しきい値透過
             </label>
@@ -301,10 +305,6 @@
           </fieldset>
           </details>
 
-          <div class="control-row">
-            <button id="renderBtn" type="button">再計算</button>
-            <button id="resetBtn" type="button">リセット</button>
-          </div>
         </aside>
       </section>
 
@@ -318,6 +318,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=restore-alpha-hash-1"></script>
+    <script type="module" src="./src/main.js?v=no-focus-marker-1"></script>
   </body>
 </html>

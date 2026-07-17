@@ -163,6 +163,13 @@ export class ModelVisibilityShaderController {
     }
   }
 
+  setRuntimeFrontAlpha(frontAlpha) {
+    this.frontAlpha = frontAlpha;
+    for (const record of this.records.values()) {
+      for (const shader of record.shaders) shader.uniforms.mprFrontAlpha.value = frontAlpha;
+    }
+  }
+
   updateMaterialRenderState(record) {
     const { material } = record;
     const useHashedForeground = this.enabled && material.opacity >= 1 && !record.originalTransparent;
