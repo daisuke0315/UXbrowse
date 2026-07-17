@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ViewSync MPR</title>
-    <link rel="stylesheet" href="./src/styles.css?v=fixed-mpr-plane-2">
+    <title>ViewSync</title>
+    <link rel="stylesheet" href="./src/styles.css?v=compact-header-1">
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <div class="brand-lockup" aria-label="ViewSync MPR">
+        <div class="brand-lockup" aria-label="ViewSync">
           <svg class="brand-mark" viewBox="0 0 48 48" role="img" aria-labelledby="brandTitle brandDesc">
-            <title id="brandTitle">ViewSync MPR</title>
+            <title id="brandTitle">ViewSync</title>
             <desc id="brandDesc">A synchronized viewing plane crossing a three-dimensional volume.</desc>
             <defs>
               <linearGradient id="brandPlaneGradient" x1="8" y1="8" x2="40" y2="40" gradientUnits="userSpaceOnUse">
@@ -27,8 +27,7 @@
             <circle class="brand-focus" cx="24" cy="27.2" r="3.2"/>
           </svg>
           <div>
-            <h1>ViewSync MPR</h1>
-            <p id="statusText">DICOM CTシリーズを選択してください。</p>
+            <h1>ViewSync</h1>
           </div>
         </div>
         <details class="file-menu">
@@ -89,13 +88,6 @@
           </div>
         </details>
       </header>
-
-      <section class="series-band" aria-label="シリーズ情報">
-        <div><span>Series</span><strong id="seriesUid">-</strong></div>
-        <div><span>Dimensions</span><strong id="volumeDimensions">-</strong></div>
-        <div><span>Spacing</span><strong id="volumeSpacing">-</strong></div>
-        <div><span>Value Range</span><strong id="huRange">-</strong></div>
-      </section>
 
       <section class="workspace controls-collapsed">
         <button id="controlsToggleBtn" class="controls-toggle" type="button" aria-expanded="false">For Specialist</button>
@@ -333,6 +325,13 @@
 
       <details class="debug-drawer">
         <summary>デバッグ・ログ</summary>
+        <section class="debug-metadata" aria-label="シリーズ情報">
+          <div class="debug-status"><span>Status</span><strong id="statusText">待機中</strong></div>
+          <div><span>Series</span><strong id="seriesUid">-</strong></div>
+          <div><span>Dimensions</span><strong id="volumeDimensions">-</strong></div>
+          <div><span>Spacing</span><strong id="volumeSpacing">-</strong></div>
+          <div><span>Value Range</span><strong id="huRange">-</strong></div>
+        </section>
         <section class="debug-band">
           <pre id="debugInfo"></pre>
           <pre id="logOutput"></pre>
@@ -341,6 +340,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=mpr-distance-max-1200-1"></script>
+    <script type="module" src="./src/main.js?v=compact-header-1"></script>
   </body>
 </html>

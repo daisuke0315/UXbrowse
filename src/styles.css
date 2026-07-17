@@ -44,12 +44,12 @@ select {
 .app-shell {
   height: 100vh;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   background: transparent;
 }
 
 .topbar,
-.series-band,
+.debug-metadata,
 .debug-band {
   border-bottom: 1px solid var(--line);
 }
@@ -321,27 +321,27 @@ summary:focus-visible {
   outline-offset: 2px;
 }
 
-.series-band {
+.debug-metadata {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: 1.4fr repeat(3, 1fr);
+  grid-template-columns: 1.4fr repeat(4, 1fr);
   gap: 0;
   background: rgb(8 13 19 / 0.92);
 }
 
-.series-band div {
+.debug-metadata div {
   position: relative;
   background: transparent;
   padding: 7px 14px;
   min-width: 0;
 }
 
-.series-band div + div {
+.debug-metadata div + div {
   border-left: 1px solid var(--line);
 }
 
-.series-band span {
+.debug-metadata span {
   display: block;
   color: #718794;
   font-size: 10px;
@@ -350,7 +350,7 @@ summary:focus-visible {
   text-transform: uppercase;
 }
 
-.series-band strong {
+.debug-metadata strong {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -902,13 +902,20 @@ pre {
   .app-shell {
     height: auto;
     min-height: 100vh;
-    grid-template-rows: auto auto auto auto;
+    grid-template-rows: auto auto auto;
   }
 
   .topbar,
-  .debug-band,
-  .series-band {
+  .debug-band {
     grid-template-columns: 1fr;
+  }
+
+  .debug-metadata {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .debug-metadata .debug-status {
+    grid-column: 1 / -1;
   }
 
   .topbar {
