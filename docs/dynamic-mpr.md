@@ -1,38 +1,45 @@
 # Three.js連動MPR
 
-## 流れ
+## 基本仕様
 
-1. Three.jsの `PerspectiveCamera` と `OrbitControls` を初期化する。
-2. DICOM / MHA読込又はデモファントム生成後、Volume物理範囲に一致するBoxを配置する。
-3. MPR注視点マーカーを `camera.position + camera.forward * MPR距離` に同期する。
-4. カメラ位置、MPR注視点、画面上方向を取得する。
-5. `ThreeDicomCoordinateMapper` でVolume world座標へ変換する。
-6. 変換後の `eyeVolume / targetVolume / upVolume` を既存 `MprRenderer` へ渡す。
-7. `OrbitControls` の `change` イベントを `MprUpdateScheduler` で集約し、多重更新を避ける。
-
-## デバッグ
-
-画面下部に以下を表示します。
-
-- `eyeThree / targetThree / upThree / nThree`
-- `eyeVolume / targetVolume / upVolume / nVolume / uVolume / vVolume`
-- 座標取得、変換、MPR生成、Canvas描画、総更新時間
-- 範囲外画素数、無効値数
-
-`デモファントム` は実DICOMがない状態でもThree.js連動とMPR更新を確認するための合成ボリュームです。
-
-## MPR注視点の正規仕様
-
-ViewSync MPRでは、MPR断面中心として使う `targetThree` は `OrbitControls.target` でもモデル中心でもありません。
+- MPR中心はカメラ前方の注視点です。
+- `OrbitControls.target`やモデル中心はMPR中心として使用しません。
 
 ```text
 targetThree = camera.position + camera.forward * mprDistance
 ```
 
-ズーム操作はカメラ位置の移動として扱います。そのため、カメラが近づくと `targetThree` も移動し、MPR断面位置も更新されます。`OrbitControls.target` は回転中心、`modelCenterThree` はモデル位置確認用の参照値として扱います。
+- 通常の注視点距離は600 mmです。
+- みかん・バナナのデモは読み込み時に300 mmへ設定します。
+- ズームでカメラ位置が変わると、注視点とMPR位置も移動します。
 
-## 3Dモデル
+## 断面モード
 
-`OBJLoader` / `GLTFLoader` で単体 `.obj` / `.glb` を読み込み、Three.jsシーンへ追加します。`モデル連動MPR` がONの場合でも、モデル中心をMPR中心にはしません。MPR中心は常にカメラ前方固定距離の `targetThree` として計算し、モデル中心は `modelCenterThree` としてデバッグ表示します。
+- **視線連動**：位置と断面方向がカメラへ追従します。
+- **Axial固定**：法線をZ方向へ固定し、位置は注視点へ追従します。
+- **Coronal固定**：法線をY方向へ固定し、位置は注視点へ追従します。
+- **Sagittal固定**：法線をX方向へ固定し、位置は注視点へ追従します。
+- 固定モードでもFOV中心をCT中央へ戻さず、カメラで見ている位置を使用します。
 
-既定ではモデルの元座標を保持します。CT/MHA座標と一致済みのモデルを確認する場合は `注視点へ中心合わせ` をOFF、Scale/位置/回転を初期値のままにします。`注視点へ中心合わせ` をONにすると、座標を持たない確認用モデルを現在の注視点へ仮配置します。
+## 更新の流れ
+
+1. カメラの`eye / target / up`を取得します。
+2. Three.js座標からDICOM／Volume座標へ変換します。
+3. 選択された断面モードへ方向を制約します。
+4. MPR画像を生成してCanvasへ描画します。
+5. 同じ画像・位置・姿勢を3D重畳面へ反映します。
+6. 更新要求をフレーム単位でまとめ、過剰な再計算を抑えます。
+
+## 3Dモデルとの関係
+
+- 座標整合済みモデルは元の位置・回転・スケールを維持します。
+- 前景Alphaが0〜1の間では、対応環境でOITを使用します。
+- OIT非対応環境ではAlpha Hashへフォールバックします。
+- MPRの既定texture方向はV反転ONです。
+
+## デバッグ情報
+
+- Three.js側とVolume側の`eye / target / up / n`
+- MPR基底`u / v`と断面中心
+- 座標変換、MPR生成、描画、合計処理時間
+- 範囲外画素数と無効値数
