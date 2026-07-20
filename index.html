@@ -50,63 +50,6 @@
             <h1>ViewSync</h1>
           </div>
         </div>
-        <details class="file-menu">
-          <summary>データ読込</summary>
-          <div class="file-actions">
-            <section class="file-category file-category-volume" aria-labelledby="volumeDataHeading">
-              <div class="file-category-heading">
-                <span class="file-category-mark" aria-hidden="true"></span>
-                <div>
-                  <strong id="volumeDataHeading">DICOM / ボリューム</strong>
-                  <small>CT断面データを読み込む</small>
-                </div>
-              </div>
-              <div class="file-category-buttons">
-                <label class="file-button">
-                  DICOMフォルダ
-                  <input id="folderInput" type="file" multiple webkitdirectory>
-                </label>
-                <label class="file-button">
-                  DICOMファイル
-                  <input id="fileInput" type="file" multiple>
-                </label>
-                <label class="file-button">
-                  MHAファイル
-                  <input id="mhaInput" type="file" accept=".mha">
-                </label>
-                <button id="demoVolumeBtn" type="button">デモファントム</button>
-              </div>
-            </section>
-
-            <section class="file-category file-category-model" aria-labelledby="modelDataHeading">
-              <div class="file-category-heading">
-                <span class="file-category-mark" aria-hidden="true"></span>
-                <div>
-                  <strong id="modelDataHeading">3Dモデル</strong>
-                  <small>重畳する形状・テクスチャ</small>
-                </div>
-              </div>
-              <div class="file-category-buttons">
-                <label class="file-button">
-                  GLBモデル
-                  <input id="glbInput" type="file" accept=".glb,model/gltf-binary">
-                </label>
-                <label class="file-button">
-                  GLB＋テクスチャ
-                  <input id="glbFolderInput" type="file" multiple webkitdirectory>
-                </label>
-                <label class="file-button">
-                  OBJモデル
-                  <input id="objInput" type="file" accept=".obj,model/obj,text/plain">
-                </label>
-                <label class="file-button">
-                  テクスチャ画像
-                  <input id="textureInput" type="file" accept="image/png,image/jpeg,image/webp">
-                </label>
-              </div>
-            </section>
-          </div>
-        </details>
       </header>
 
       <section class="workspace controls-collapsed">
@@ -144,6 +87,69 @@
         </div>
 
         <aside class="controls-pane">
+          <details class="file-menu settings-file-menu">
+            <summary>データ読込</summary>
+            <div class="file-actions">
+              <p class="alignment-notice" role="note">
+                <strong>重畳データの条件</strong>
+                CTと可視光モデルは、同じ座標系へ高精度に整合されたデータを使用してください。未整合のデータでは断面位置が正しく一致しません。
+              </p>
+
+              <section class="file-category file-category-volume" aria-labelledby="volumeDataHeading">
+                <div class="file-category-heading">
+                  <span class="file-category-mark" aria-hidden="true"></span>
+                  <div>
+                    <strong id="volumeDataHeading">DICOM / ボリューム</strong>
+                    <small>CT断面データを読み込む</small>
+                  </div>
+                </div>
+                <div class="file-category-buttons">
+                  <label class="file-button">
+                    DICOMフォルダ
+                    <input id="folderInput" type="file" multiple webkitdirectory>
+                  </label>
+                  <label class="file-button">
+                    DICOMファイル
+                    <input id="fileInput" type="file" multiple>
+                  </label>
+                  <label class="file-button">
+                    MHAファイル
+                    <input id="mhaInput" type="file" accept=".mha">
+                  </label>
+                  <button id="demoVolumeBtn" type="button">デモファントム</button>
+                </div>
+              </section>
+
+              <section class="file-category file-category-model" aria-labelledby="modelDataHeading">
+                <div class="file-category-heading">
+                  <span class="file-category-mark" aria-hidden="true"></span>
+                  <div>
+                    <strong id="modelDataHeading">3Dモデル</strong>
+                    <small>重畳する形状・テクスチャ</small>
+                  </div>
+                </div>
+                <div class="file-category-buttons">
+                  <label class="file-button">
+                    GLBモデル
+                    <input id="glbInput" type="file" accept=".glb,model/gltf-binary">
+                  </label>
+                  <label class="file-button">
+                    GLB＋テクスチャ
+                    <input id="glbFolderInput" type="file" multiple webkitdirectory>
+                  </label>
+                  <label class="file-button">
+                    OBJモデル
+                    <input id="objInput" type="file" accept=".obj,model/obj,text/plain">
+                  </label>
+                  <label class="file-button">
+                    テクスチャ画像
+                    <input id="textureInput" type="file" accept="image/png,image/jpeg,image/webp">
+                  </label>
+                </div>
+              </section>
+            </div>
+          </details>
+
           <details class="control-group">
             <summary>基本操作</summary>
           <fieldset>
@@ -366,6 +372,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=banana-demo-2"></script>
+    <script type="module" src="./src/main.js?v=settings-data-import-1"></script>
   </body>
 </html>

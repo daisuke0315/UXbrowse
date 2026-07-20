@@ -335,7 +335,6 @@ function toggleObservationLock() {
   els.mikanDemoBtn.disabled = locking;
   els.bananaDemoBtn.disabled = locking;
   setContainerControlsLocked(els.controlsPane, locking);
-  setContainerControlsLocked(els.fileMenu, locking);
   els.observationLockBtn.setAttribute("aria-pressed", String(locking));
   els.observationLockBtn.setAttribute("aria-label", locking ? "観察モードを解除" : "現在の状態をロック");
   els.observationLockBtn.title = locking ? "観察モードを解除" : "現在の状態をロック";

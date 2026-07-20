@@ -342,6 +342,72 @@ p {
   backdrop-filter: blur(22px);
 }
 
+.settings-file-menu {
+  z-index: auto;
+  margin: 0 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.018);
+  overflow: hidden;
+}
+
+.settings-file-menu > summary {
+  height: auto;
+  min-height: 38px;
+  border: 0;
+  border-radius: 0;
+  padding: 10px 12px;
+  box-shadow: none;
+  background: transparent;
+  color: #dbeafe;
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.settings-file-menu > summary::before {
+  content: "▸";
+  margin-right: 7px;
+  color: var(--accent);
+}
+
+.settings-file-menu[open] > summary {
+  border-bottom: 1px solid var(--line);
+  background: rgb(34 211 238 / 0.055);
+}
+
+.settings-file-menu[open] > summary::before {
+  content: "▾";
+}
+
+.settings-file-menu .file-actions {
+  position: static;
+  width: auto;
+  padding: 9px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.alignment-notice {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid rgb(251 191 36 / 0.28);
+  border-radius: 9px;
+  background: rgb(120 53 15 / 0.12);
+  color: #cbd5e1;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.alignment-notice strong {
+  color: #fde68a;
+  font-size: 11px;
+}
+
 .file-category {
   display: grid;
   gap: 7px;
@@ -733,6 +799,10 @@ summary:focus-visible {
   cursor: not-allowed;
   opacity: 0.38;
   transform: none;
+}
+
+.workspace:not(.controls-collapsed) .demo-quick-switch {
+  display: none;
 }
 
 .observation-lock .lock-icon {
