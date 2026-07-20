@@ -27,7 +27,7 @@ const MPR_THRESHOLD_MAX = 500;
 const STARTUP_DEMO = {
   name: "みかん",
   glbUrl: "./data/mikan/mikan.glb",
-  mhaUrl: "./data/mikan/volume_preprocessed.mha",
+  mhaUrl: "./data/mikan/volume_preprocessed.mha.gz",
 };
 // MPRキャンバスは読影用の正表示を維持し、Three.js重畳面で生じる
 // CanvasTexture／裏面表示のU/V差だけをtexture座標で補正する。
@@ -59,6 +59,9 @@ const state = {
 };
 
 const els = {
+  startupLoading: document.querySelector("#startupLoading"),
+  startupLoadingTitle: document.querySelector("#startupLoadingTitle"),
+  startupLoadingDetail: document.querySelector("#startupLoadingDetail"),
   fileInput: document.querySelector("#fileInput"),
   folderInput: document.querySelector("#folderInput"),
   mhaInput: document.querySelector("#mhaInput"),
@@ -245,7 +248,26 @@ function cancelStartupDemo() {
   if (!state.startupDemoLoading) return;
   state.startupDemoToken += 1;
   state.startupDemoLoading = false;
+  hideStartupLoading();
   logger.info("手動読込を優先し、初期みかんデモの読込を中止しました");
+}
+
+function updateStartupLoading(step, detail) {
+  if (!els.startupLoading) return;
+  els.startupLoading.classList.remove("is-hidden");
+  els.startupLoadingTitle.textContent = `${STARTUP_DEMO.name}デモを読み込んでいます`;
+  els.startupLoadingDetail.textContent = detail;
+  const order = ["model", "ct", "display"];
+  const activeIndex = order.indexOf(step);
+  for (const item of els.startupLoading.querySelectorAll("[data-loading-step]")) {
+    const index = order.indexOf(item.dataset.loadingStep);
+    item.classList.toggle("is-active", index === activeIndex);
+    item.classList.toggle("is-complete", activeIndex >= 0 && index < activeIndex);
+  }
+}
+
+function hideStartupLoading() {
+  els.startupLoading?.classList.add("is-hidden");
 }
 
 function toggleControlsPane() {
@@ -731,6 +753,7 @@ async function initThree() {
     state.threeReady = false;
     els.threeViewport.innerHTML = `<div class="three-placeholder">Three.jsを読み込めませんでした。静的MPRは利用できます。<br>${escapeHtml(error.message)}</div>`;
     logger.error("Three.js初期化失敗", { message: error.message });
+    hideStartupLoading();
     writeDiagnostics();
   }
 }
@@ -741,6 +764,7 @@ async function loadStartupMikanDemo() {
   state.startupDemoLoading = true;
   const startedAt = performance.now();
   try {
+    updateStartupLoading("model", "3Dモデルを読み込んでいます...");
     els.statusText.textContent = `${STARTUP_DEMO.name}デモのモデルを読込中...`;
     const glbBuffer = await fetchArrayBuffer(STARTUP_DEMO.glbUrl);
     if (token !== state.startupDemoToken) return;
@@ -749,10 +773,16 @@ async function loadStartupMikanDemo() {
 
     // 先にモデルの描画機会を作り、その後に大容量CTを読み込む。
     await new Promise((resolve) => requestAnimationFrame(resolve));
+    updateStartupLoading("ct", "CTデータを読み込んでいます（しばらくお待ちください）...");
     els.statusText.textContent = `${STARTUP_DEMO.name}デモのCTを読込中...`;
-    const mhaBuffer = await fetchArrayBuffer(STARTUP_DEMO.mhaUrl);
+    const compressedMhaBuffer = await fetchArrayBuffer(STARTUP_DEMO.mhaUrl);
+    if (token !== state.startupDemoToken) return;
+    updateStartupLoading("ct", "CTデータをバックグラウンドで展開しています...");
+    els.statusText.textContent = `${STARTUP_DEMO.name}デモのCTを展開中...`;
+    const mhaBuffer = await decompressGzipArrayBuffer(compressedMhaBuffer);
     if (token !== state.startupDemoToken) return;
     state.volume = mhaLoader.parse(mhaBuffer, "volume_preprocessed.mha");
+    updateStartupLoading("display", "断面画像と3D表示を準備しています...");
     state.result = null;
     installVolumeDefaults(state.volume);
     configureThreeForVolume(state.volume);
@@ -777,7 +807,10 @@ async function loadStartupMikanDemo() {
       els.statusText.textContent = `みかんデモ読込失敗: ${error.message}`;
     }
   } finally {
-    if (token === state.startupDemoToken) state.startupDemoLoading = false;
+    if (token === state.startupDemoToken) {
+      state.startupDemoLoading = false;
+      hideStartupLoading();
+    }
   }
 }
 
@@ -789,6 +822,34 @@ async function fetchArrayBuffer(url) {
     throw error;
   }
   return response.arrayBuffer();
+}
+
+async function decompressGzipArrayBuffer(compressedBuffer) {
+  if (typeof Worker !== "undefined") {
+    return new Promise((resolve, reject) => {
+      const workerUrl = new URL("./workers/GzipDecompressionWorker.js?v=mikan-gzip-1", import.meta.url);
+      const worker = new Worker(workerUrl, { type: "module" });
+      worker.addEventListener("message", (event) => {
+        worker.terminate();
+        if (event.data?.error) {
+          reject(new Error(event.data.error));
+          return;
+        }
+        resolve(event.data.buffer);
+      }, { once: true });
+      worker.addEventListener("error", (event) => {
+        worker.terminate();
+        reject(new Error(`CTデータの展開に失敗しました: ${event.message || "Worker error"}`));
+      }, { once: true });
+      worker.postMessage({ buffer: compressedBuffer }, [compressedBuffer]);
+    });
+  }
+
+  if (typeof DecompressionStream === "undefined") {
+    throw new Error("このブラウザはgzip展開に対応していません");
+  }
+  const stream = new Blob([compressedBuffer]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return new Response(stream).arrayBuffer();
 }
 
 function installScheduler() {

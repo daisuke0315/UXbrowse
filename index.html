@@ -4,9 +4,29 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ViewSync</title>
-    <link rel="stylesheet" href="./src/styles.css?v=compact-header-1">
+    <link rel="stylesheet" href="./src/styles.css?v=startup-loading-1">
   </head>
   <body>
+    <div id="startupLoading" class="startup-loading" role="status" aria-live="polite" aria-label="デモデータを読み込んでいます">
+      <div class="startup-loading-card">
+        <svg class="startup-loading-mark" viewBox="0 0 48 48" aria-hidden="true">
+          <path class="startup-loading-volume" d="M24 4.5 40.5 14v20L24 43.5 7.5 34V14L24 4.5Z"/>
+          <path class="startup-loading-plane" d="M10.5 27.2 24 19.3l13.5 7.9L24 35.1 10.5 27.2Z"/>
+          <circle class="startup-loading-focus" cx="24" cy="27.2" r="3.2"/>
+        </svg>
+        <div class="startup-loading-copy">
+          <span>ViewSync</span>
+          <strong id="startupLoadingTitle">みかんデモを準備しています</strong>
+          <small id="startupLoadingDetail">3Dビューアを初期化中...</small>
+        </div>
+        <div class="startup-loading-progress" aria-hidden="true"><i></i></div>
+        <div class="startup-loading-steps" aria-hidden="true">
+          <span data-loading-step="model">3Dモデル</span>
+          <span data-loading-step="ct">CTデータ</span>
+          <span data-loading-step="display">表示準備</span>
+        </div>
+      </div>
+    </div>
     <main class="app-shell">
       <header class="topbar">
         <div class="brand-lockup" aria-label="ViewSync">
@@ -340,6 +360,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=startup-mikan-demo-3"></script>
+    <script type="module" src="./src/main.js?v=mikan-gzip-1"></script>
   </body>
 </html>
