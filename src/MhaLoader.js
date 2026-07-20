@@ -1,6 +1,7 @@
 import { invert3 } from "./math3d.js";
 
 const MHA_COORDINATE_WARNING = "MHA座標系はDICOM患者座標系であるとは限りません。DICOM由来MHAの場合は、origin / spacing / direction が保持されていることを確認してください。";
+const HOST_IS_LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
 
 const ELEMENT_TYPES = {
   MET_CHAR: { bytes: 1, ArrayType: Int8Array, reader: "getInt8", scalarType: "MET_CHAR" },
@@ -54,13 +55,21 @@ export class MhaLoader {
     // ホスト環境のendianに依存せず、big-endian MHAも同じTypedArrayへ正規化できる。
     const littleEndian = !readBoolField(header, "ElementByteOrderMSB", readBoolField(header, "BinaryDataByteOrderMSB", false));
     const dataView = new DataView(arrayBuffer, dataOffset, expectedBytes);
-    const data = new elementInfo.ArrayType(voxelCount);
+    // 一般的なlittle-endianかつalignment済みMHAは、400MB級の全voxelを
+    // 別TypedArrayへ複製せず、受信済みArrayBufferを直接参照する。
+    const canUseNativeView = littleEndian === HOST_IS_LITTLE_ENDIAN
+      && dataOffset % elementInfo.bytes === 0;
+    const data = canUseNativeView
+      ? new elementInfo.ArrayType(arrayBuffer, dataOffset, voxelCount)
+      : new elementInfo.ArrayType(voxelCount);
     let minimumValue = Infinity;
     let maximumValue = -Infinity;
     let invalidCount = 0;
     for (let i = 0; i < voxelCount; i += 1) {
-      const value = readScalar(dataView, i * elementInfo.bytes, elementInfo, littleEndian);
-      data[i] = value;
+      const value = canUseNativeView
+        ? data[i]
+        : readScalar(dataView, i * elementInfo.bytes, elementInfo, littleEndian);
+      if (!canUseNativeView) data[i] = value;
       if (Number.isFinite(value)) {
         if (value < minimumValue) minimumValue = value;
         if (value > maximumValue) maximumValue = value;
@@ -103,6 +112,7 @@ export class MhaLoader {
       dimensions,
       spacing,
       scalarType: elementInfo.scalarType,
+      zeroCopy: canUseNativeView,
       min: minimumValue,
       max: maximumValue,
       ms: Math.round(performance.now() - start),

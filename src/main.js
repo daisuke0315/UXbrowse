@@ -7,7 +7,7 @@ import { ValidationLogger } from "./ValidationLogger.js";
 import { formatVector } from "./math3d.js";
 import { volumeCenter } from "./VolumeGeometry.js";
 import { viewerConfig } from "./config/viewerConfig.js?v=interaction-defaults-1";
-import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=fixed-mpr-plane-2";
+import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=startup-mikan-demo-3";
 import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController, constrainDicomInputToPlane } from "./three/DynamicMprController.js?v=fixed-mpr-plane-2";
@@ -24,6 +24,11 @@ const MPR_DISTANCE_MIN = 50;
 const MPR_DISTANCE_MAX = 1200;
 const MPR_THRESHOLD_MIN = -1200;
 const MPR_THRESHOLD_MAX = 500;
+const STARTUP_DEMO = {
+  name: "みかん",
+  glbUrl: "./data/mikan/mikan.glb",
+  mhaUrl: "./data/mikan/volume_preprocessed.mha",
+};
 // MPRキャンバスは読影用の正表示を維持し、Three.js重畳面で生じる
 // CanvasTexture／裏面表示のU/V差だけをtexture座標で補正する。
 // The PiP monitor previews the actual overlay texture; only V is flipped by default.
@@ -42,6 +47,8 @@ const state = {
   volumeAxisFlip: [1, 1, 1],
   mprUvFlip: [...DEFAULT_MPR_UV_FLIP],
   observationLocked: false,
+  startupDemoToken: 0,
+  startupDemoLoading: false,
   defaults: {
     eye: [0, 0, -500],
     target: [0, 0, 0],
@@ -141,14 +148,14 @@ logger.subscribe(() => {
   els.logOutput.scrollTop = els.logOutput.scrollHeight;
 });
 
-els.fileInput.addEventListener("change", () => runFromFileMenu(() => handleFiles(els.fileInput.files)));
-els.folderInput.addEventListener("change", () => runFromFileMenu(() => handleFiles(els.folderInput.files)));
-els.mhaInput.addEventListener("change", () => runFromFileMenu(() => handleMhaFile(els.mhaInput.files?.[0])));
-els.objInput.addEventListener("change", () => runFromFileMenu(() => handleObjFile(els.objInput.files?.[0])));
-els.glbInput.addEventListener("change", () => runFromFileMenu(() => handleGlbFile(els.glbInput.files?.[0])));
-els.glbFolderInput.addEventListener("change", () => runFromFileMenu(() => handleGlbFolder(els.glbFolderInput.files)));
-els.textureInput.addEventListener("change", () => runFromFileMenu(() => handleTextureFile(els.textureInput.files?.[0])));
-els.demoVolumeBtn.addEventListener("click", () => runFromFileMenu(loadDemoVolume));
+els.fileInput.addEventListener("change", () => runManualFromFileMenu(() => handleFiles(els.fileInput.files)));
+els.folderInput.addEventListener("change", () => runManualFromFileMenu(() => handleFiles(els.folderInput.files)));
+els.mhaInput.addEventListener("change", () => runManualFromFileMenu(() => handleMhaFile(els.mhaInput.files?.[0])));
+els.objInput.addEventListener("change", () => runManualFromFileMenu(() => handleObjFile(els.objInput.files?.[0])));
+els.glbInput.addEventListener("change", () => runManualFromFileMenu(() => handleGlbFile(els.glbInput.files?.[0])));
+els.glbFolderInput.addEventListener("change", () => runManualFromFileMenu(() => handleGlbFolder(els.glbFolderInput.files)));
+els.textureInput.addEventListener("change", () => runManualFromFileMenu(() => handleTextureFile(els.textureInput.files?.[0])));
+els.demoVolumeBtn.addEventListener("click", () => runManualFromFileMenu(loadDemoVolume));
 document.addEventListener("pointerdown", (event) => {
   if (els.fileMenu.open && !els.fileMenu.contains(event.target)) {
     els.fileMenu.open = false;
@@ -227,6 +234,18 @@ writeDiagnostics();
 function runFromFileMenu(action) {
   els.fileMenu.open = false;
   return action();
+}
+
+function runManualFromFileMenu(action) {
+  cancelStartupDemo();
+  return runFromFileMenu(action);
+}
+
+function cancelStartupDemo() {
+  if (!state.startupDemoLoading) return;
+  state.startupDemoToken += 1;
+  state.startupDemoLoading = false;
+  logger.info("手動読込を優先し、初期みかんデモの読込を中止しました");
 }
 
 function toggleControlsPane() {
@@ -707,12 +726,69 @@ async function initThree() {
     state.threeScene.onControlsChange(() => requestLinkedMpr("camera"));
     if (state.volume) configureThreeForVolume(state.volume);
     writeDiagnostics();
+    void loadStartupMikanDemo();
   } catch (error) {
     state.threeReady = false;
     els.threeViewport.innerHTML = `<div class="three-placeholder">Three.jsを読み込めませんでした。静的MPRは利用できます。<br>${escapeHtml(error.message)}</div>`;
     logger.error("Three.js初期化失敗", { message: error.message });
     writeDiagnostics();
   }
+}
+
+async function loadStartupMikanDemo() {
+  const token = state.startupDemoToken + 1;
+  state.startupDemoToken = token;
+  state.startupDemoLoading = true;
+  const startedAt = performance.now();
+  try {
+    els.statusText.textContent = `${STARTUP_DEMO.name}デモのモデルを読込中...`;
+    const glbBuffer = await fetchArrayBuffer(STARTUP_DEMO.glbUrl);
+    if (token !== state.startupDemoToken) return;
+    await state.threeScene.loadGlbArrayBuffer(glbBuffer, "mikan.glb", getObjOptions());
+    if (token !== state.startupDemoToken) return;
+
+    // 先にモデルの描画機会を作り、その後に大容量CTを読み込む。
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    els.statusText.textContent = `${STARTUP_DEMO.name}デモのCTを読込中...`;
+    const mhaBuffer = await fetchArrayBuffer(STARTUP_DEMO.mhaUrl);
+    if (token !== state.startupDemoToken) return;
+    state.volume = mhaLoader.parse(mhaBuffer, "volume_preprocessed.mha");
+    state.result = null;
+    installVolumeDefaults(state.volume);
+    configureThreeForVolume(state.volume);
+    state.threeScene.focusObjModelAtDistance(readFloat(els.objMprDistance, DEFAULT_MPR_DISTANCE));
+    updateSeriesInfo();
+    requestLinkedMpr("startup-mikan");
+    els.statusText.textContent = `${STARTUP_DEMO.name}デモ読込完了`;
+    logger.info("初期みかんデモを読み込みました", {
+      glb: STARTUP_DEMO.glbUrl,
+      mha: STARTUP_DEMO.mhaUrl,
+      ms: Math.round(performance.now() - startedAt),
+    });
+    writeDiagnostics();
+  } catch (error) {
+    if (token !== state.startupDemoToken) return;
+    const missing = error.status === 404;
+    if (missing) {
+      logger.warn("初期みかんデモが見つからないため通常起動します", { message: error.message });
+      els.statusText.textContent = "待機中";
+    } else {
+      logger.error("初期みかんデモの読込に失敗しました", { message: error.message });
+      els.statusText.textContent = `みかんデモ読込失敗: ${error.message}`;
+    }
+  } finally {
+    if (token === state.startupDemoToken) state.startupDemoLoading = false;
+  }
+}
+
+async function fetchArrayBuffer(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    const error = new Error(`${url} (${response.status} ${response.statusText})`);
+    error.status = response.status;
+    throw error;
+  }
+  return response.arrayBuffer();
 }
 
 function installScheduler() {

@@ -498,6 +498,26 @@ export class ThreeSceneManager {
     };
   }
 
+  focusObjModelAtDistance(distance = 600) {
+    if (!this.objModel || !this.camera || !this.controls) return null;
+    this.objModel.updateMatrixWorld(true);
+    const box = new this.THREE.Box3().setFromObject(this.objModel);
+    if (box.isEmpty()) return null;
+    const center = new this.THREE.Vector3();
+    const cameraDirection = new this.THREE.Vector3();
+    box.getCenter(center);
+    cameraDirection.copy(this.camera.position).sub(this.controls.target);
+    if (cameraDirection.lengthSq() < 1e-8) cameraDirection.set(0, -1, 0.5);
+    cameraDirection.normalize();
+    this.controls.target.copy(center);
+    this.camera.position.copy(center).addScaledVector(cameraDirection, Math.max(1, distance));
+    this.camera.lookAt(center);
+    this.controls.update();
+    this.refreshSceneContentBounds();
+    this.requestRender();
+    return center.toArray();
+  }
+
   clearObjModel() {
     if (!this.objModel) return;
     const sourceFormat = this.objModel.userData.sourceFormat || "3D";
