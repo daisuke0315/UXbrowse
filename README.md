@@ -1,143 +1,103 @@
-# ViewSync MPR
+# ViewSync
 
-外観モデル連動MPRビューア
+CT断面画像（MPR）と可視光3Dモデルを、ブラウザ上で重ねて観察するための研究開発用ビューアです。
 
-## Python DICOM Viewer
+## 概要
 
-ローカル閲覧用デスクトップアプリを `tools/dicom_viewer.py` に用意しています。DICOMファイル／フォルダ読込、同一フォルダ内のシリーズ切替、シリーズの物理位置順ソート、Axial・Coronal・Sagittalの連動MPR、十字フォーカスマーカー、ボクセル／Patient座標ログ、Window Level / Width調整、個別ビューのズーム、白黒反転、DICOMタグ表示に対応します。フォルダ選択時は最初にヘッダだけを走査し、選択したシリーズから3断面用ボリュームを構築します。
+- 3Dモデルをメイン画面、MPRをサブ画面として表示します。
+- カメラの視線に連動した断面、またはAxial・Coronal・Sagittal固定断面を表示できます。
+- MPRより手前のモデルを透過し、外観と内部構造の位置関係を確認できます。
+- DICOM・MHA・GLB・OBJをブラウザ内で読み込みます。
+- 読み込んだデータを外部サーバーへ送信しません。
+- 本リポジトリは、あらかじめ整合されたCTと3Dモデルを観察するビューアです。CTとモデルの位置合わせ処理自体は含みません。
+
+## オンラインデモ
+
+- [ViewSyncを開く](https://daisuke0315.github.io/UXbrowse/)
+- 初回は「みかん」デモを自動で読み込みます。
+- 「データ読込」から「みかん」と「バナナ」を切り替えられます。
+- 初回表示は3DモデルとCTデータの読み込みに時間がかかる場合があります。
+
+## 主な機能
+
+- DICOM CTシリーズと単一MHAボリュームの読み込み
+- GLB・OBJ可視光モデルの読み込み
+- 視線連動MPR
+- Axial・Coronal・Sagittal固定MPR
+- MPR画像の3D空間への重畳
+- OITによるモデル前景の半透明表示
+- CT値しきい値によるMPR背景の透過
+- Window Level・Window Width調整
+- 最近傍補間・三線形補間
+- モデルの位置・回転・スケール調整
+- 回転・平行移動・ズームと操作状態のロック
+
+## 基本操作
+
+- ドラッグ：3Dモデルを回転
+- Shift＋ドラッグ：画面に沿って平行移動
+- ホイール／トラックパッド：ズーム
+- 鍵アイコン：現在の重畳状態を固定・解除
+- `For Specialist`：詳細設定を表示
+- `データ読込`：デモまたは手元のCT・モデルを選択
+
+## ローカル起動
+
+Node.jsやビルド処理は不要です。
 
 ```bash
-python3 -m pip install -r tools/requirements_dicom_viewer.txt
-python3 tools/dicom_viewer.py
-```
-
-macOSでは `tools/start_dicom_viewer.command` をダブルクリックすると、初回だけ専用の仮想環境と依存関係を自動セットアップして起動します。各断面には専用の横スライダーがあります。十字中心の左ドラッグでフォーカス追従、それ以外の左ドラッグで画像パン、ホイールで各断面移動、トラックパッドのピンチまたはCtrl+ホイールで対象ビューをズーム、ダブルクリックで表示をリセットします。閲覧・研究用途の試作であり、診断用途の医療機器ソフトウェアではありません。
-
-## ドキュメント
-
-- [プロジェクト概要](docs/project-overview.md): 開発背景、解決したい課題、基本コンセプト、想定用途
-- [設計判断記録](docs/architecture-decisions.md): 現在の構成と正規仕様を採用した理由
-- [研究・開発状況](docs/research-status.md): 実装済み、未実装、実験値、未検証事項の区別
-- [座標系定義](docs/coordinate-system.md): DICOM、Volume、Three.js間の座標規約
-- [MPRアルゴリズム設計](docs/mpr-algorithm.md): 任意断面の計算方法
-- [Three.js連動MPR](docs/dynamic-mpr.md): カメラ連動の処理と注視点仕様
-
-ブラウザ内だけで非圧縮CT DICOMシリーズ又は単一`.mha`ボリュームを読み込み、`eye`、`target`、`up` から任意断面MPRを生成する試作です。Three.jsのカメラ、OrbitControls、カメラ前方固定距離のMPR注視点、読み込んだ3DモデルにMPRを連動させます。外部サーバー送信、IndexedDB、LocalStorage保存は行いません。
-
-## 起動
-
-`browser-mpr/index.html` をChromeで開きます。ローカルファイルのES Modulesが制限される環境では、任意の静的サーバーで `browser-mpr/` を配信してください。
-
-```bash
-cd browser-mpr
+git clone https://github.com/daisuke0315/UXbrowse.git
+cd UXbrowse
 python3 -m http.server 5173
 ```
 
-その場合は `http://localhost:5173/` を開きます。
+- ブラウザで `http://localhost:5173/` を開きます。
+- 最新版のChrome、Edge、Safariを推奨します。
+- 大きなCTや3Dモデルでは、端末のメモリ容量やGPU性能により動作が重くなる場合があります。
 
-Three.js本体、OrbitControls、OBJLoader、GLTFLoaderは `vendor/` にローカル配置しているため、起動後はCDNに依存しません。
+## 対応データ
 
-## 試し方
+- DICOM：単一フレームCT、非圧縮Little Endian、16-bit Pixel Data
+- MHA：3次元、バイナリ、`ElementDataFile = LOCAL`
+- 3Dモデル：GLB、OBJ
+- MHA ElementType：`MET_SHORT`、`MET_USHORT`、`MET_FLOAT`、`MET_CHAR`、`MET_UCHAR`、`MET_INT`、`MET_UINT`、`MET_DOUBLE`
 
-実データがない場合は `デモファントム` を押すと、合成CTボリューム、Volume範囲Box、動的MPRをすぐ確認できます。
+## 未対応
 
-実DICOMで試す場合は、`DICOMファイル` 又は `フォルダ` から同一CTシリーズを選択します。MHAで試す場合は、`MHAファイル` から `ElementDataFile = LOCAL` の単一`.mha`を選択します。読込後、左のThree.js表示をドラッグ、右ドラッグ、ホイール操作すると、カメラの `eye / target / up` がVolume座標へ変換され、MPRが更新されます。
+- JPEG・JPEG-LS・JPEG 2000圧縮DICOM
+- Enhanced CT
+- `.mhd + .raw`
+- PACS・DICOMweb接続
+- 患者情報管理やデータ保存
+- CTと可視光モデルの自動位置合わせ
 
-3Dモデルは `OBJモデル`、`GLBモデル` 又は `GLB＋テクスチャ選択` から読み込みます。外部textureを参照するGLBは、GLBとtextureを含むフォルダを`GLB＋テクスチャ選択`から選ぶと、GLB内の相対パスに従って自動読込します。`モデル連動MPR` がONの場合でも、MPR中心はモデル中心固定ではなく `camera.position + camera.forward * MPR距離` で定義します。ズームでカメラ位置が変わるとMPR中心も移動します。モデル中心はデバッグ用の参照値として表示します。
+## ディレクトリ
 
-## 注視点仕様
+- `src/`：ビューア、MPR、座標変換、Three.js連携
+- `vendor/`：ブラウザ実行に必要な外部ライブラリ
+- `data/`：公開デモデータ
+- `docs/`：設計・座標系・研究開発状況
+- `tools/`：データ処理とデスクトップDICOMビューア
+- `tests.html`：ブラウザ単体テスト
 
-ViewSync MPRのMPR注視点は、Three.js標準の `OrbitControls.target` でも、3Dモデルのバウンディングボックス中心でもありません。現在の正規仕様は以下です。
+## 技術資料
 
-```text
-MPR注視点 = camera.position + camera.forward * MPR距離
-```
+- [プロジェクト概要](docs/project-overview.md)
+- [設計判断](docs/architecture-decisions.md)
+- [研究・開発状況](docs/research-status.md)
+- [座標系](docs/coordinate-system.md)
+- [MPRアルゴリズム](docs/mpr-algorithm.md)
+- [Three.js連動MPR](docs/dynamic-mpr.md)
 
-この仕様により、ズーム操作でカメラがモデルへ近づくと、カメラ前方に固定されたMPRプレーンもCT/MHA空間内で移動します。これはUnity版の「カメラ前方に固定したプレーンをtranslateして重畳する」挙動に合わせるための仕様です。
+## 注意事項
 
-用語は次のように分けます。
-
-- `OrbitControls.target`: 3D操作の回転中心です。MPR中心ではありません。
-- `modelCenter`: OBJ / GLBモデルの現在のワールド中心です。MPR中心ではなく、位置確認用の参照値です。
-- `targetThree` / `targetVolume`: MPR注視点です。`camera-forward` 系の値として計算し、MPR断面中心になります。
-- `注視点距離/MPR距離`: カメラ位置からMPR注視点までの距離です。
-
-初期値はMPR距離`1000 mm`、MPR画像方向は`V反転 ON`です。`MPR UVリセット`を押した場合もこの初期状態へ戻ります。
-
-## 現在の確定状態
-
-2026-07-10時点で、以下の動作を現状仕様として保存しています。
-
-- DICOM / MHAボリューム読込後、Three.jsカメラ操作にMPRが追従します。
-- OBJ / GLBモデル読込後も、Three.jsカメラ操作はカメラ基準のMPR更新として動き続けます。
-- OBJ / GLBモデルは、撮影済みの外観色を照明で変化させないUnlit表示を既定とします。GLBのbase color、texture、vertex color、alpha設定は可能な範囲で引き継ぎます。
-- 通常表示は`Opacity = 1`、`前景透過 OFF`、両面描画、depth test／depth write有効を既定とします。フォトグラメトリmeshの薄い開放面や局所的な面向きの不整合を`FrontSide`で除外せず、手前面をdepthへ参加させます。Three.js r185のReverse-Zを対応GPUで使用し、near／farもモデルとカメラ距離へ動的に追随します。
-- Canvas上に生成したMPR画像は、Three.js空間内のMPRプレーンにもCanvasTextureとして重畳表示されます。
-- MPRプレーンは `plane.center / u / v / n` をVolume座標からThree.js座標へ変換し、断面と同じ位置・姿勢で配置されます。
-- MPRプレーンの表示、Opacity、境界線表示をMPRパネルから切り替えできます。
-- `モデル連動MPR` がONの場合、MPR中心は `camera.position + camera.forward * MPR距離` で生成します。モデル中心はMPR中心ではなく、デバッグ欄の `modelCenterThree` として確認します。
-- ズームでカメラ位置が動いた場合、MPR注視点とMPR断面も移動します。これはViewSync MPRの正規仕様です。
-- `MPRプレーン前景透過` がONの場合、MPRプレーンよりカメラ手前側にあるOBJ / GLBメッシュをshaderのAlpha Hashで間引きます。巨大な単一meshを通常の透明objectにせず、残るfragmentのdepth writeを維持します。
-- 前景透過の `前景Alpha`、`前景透過距離 mm`、`フェード幅 mm`、`完全切断` はMPRパネルから調整できます。`前景透過距離 = 0` の場合は、MPRプレーンよりカメラ手前側全体が透過対象です。
-- MPRプレーン側では `CT値しきい値透過` により、指定したCT値以下の画素を透明化できます。初期値は `-500` です。
-- `モデル連動MPR` をOFFにすると、MPR更新はカメラ基準へ戻ります。
-- CT/MHA座標とモデル座標が合わない場合の手動確認用に、`CT座標反転` の `X反転`、`Y反転`、`Z反転`、`反転リセット` を使えます。
-- CT座標反転はVolume中心まわりに適用されます。モデル座標は変更しません。
-- 反転中の軸はボタンのON表示とデバッグ欄の `CT Axis Flip` で確認できます。
-
-座標整合済みモデルを確認する時の基本設定は、`注視点へ中心合わせ OFF`、`Scale = 1`、`位置 = 0,0,0`、`回転 = 0,0,0` です。
-
-## 対応範囲
-
-- 単一フレームCT DICOM、非圧縮 Little Endian Explicit VR / Implicit VR、16-bit Pixel Data
-- 同一SeriesのRows、Columns、Pixel Spacing、Image Orientation Patientが一致するDICOMシリーズ
-- 単一`.mha`、`NDims = 3`、`BinaryData = True`、`CompressedData = False`、`ElementDataFile = LOCAL`
-- MHA ElementType: `MET_SHORT`、`MET_USHORT`、`MET_FLOAT`、`MET_CHAR`、`MET_UCHAR`、`MET_INT`、`MET_UINT`、`MET_DOUBLE`
-- Axial、Coronal、Sagittal、任意斜断面、Three.jsカメラ連動MPR、3Dモデル連動MPR
-- MPR画像のThree.js空間内プレーン重畳表示
-- MPRプレーンよりカメラ手前側にあるOBJ / GLBモデルのshader透過
-- MPRプレーン上の任意CT値しきい値以下のalpha透過
-- 最近傍補間、三線形補間、Window Level / Width、Min-Maxプリセット
-- OBJ / GLBモデル読込、GLBフォルダ内の外部texture自動解決、表示、中心合わせ、Scale、Opacity、位置、回転変更
-- 外観モデルのUnlit表示
-- CT/MHA座標のX/Y/Z軸反転切り替え
-
-JPEG/JPEG-LS/JPEG2000圧縮DICOM、Enhanced CT、圧縮MHA、`.mhd + .raw`、GLB外部ファイル、Draco/KTX2、PACS/DICOMweb、患者情報管理、保存機能は対象外です。
-
-## モジュール
-
-- `src/DicomLoader.js`: DICOM判定、タグ解析、Pixel Data展開
-- `src/MhaLoader.js`: MHAヘッダ解析、LOCALバイナリ展開、Volume metadata生成
-- `src/VolumeBuilder.js`: DICOMスライス検証、並び替え、HU変換、ボリューム構築
-- `src/CoordinateTransformer.js`: Volume world座標と連続voxel座標の変換
-- `src/MprPlaneCalculator.js`: `eye`、`target`、`up` から `n`、`u`、`v` を算出
-- `src/Interpolator.js`: 最近傍補間、三線形補間
-- `src/WindowingProcessor.js`: スカラー値から8-bitグレースケールへのWindow処理
-- `src/MprRenderer.js`: MPR画像生成とCanvas描画
-- `src/ValidationLogger.js`: ログ保持と画面表示
-- `src/VolumeGeometry.js`: Volume中心、voxel中心範囲、表示用Box寸法の共通計算
-- `src/three/ThreeSceneManager.js`: Three.jsシーン、Volume Box、補助表示、OBJ/GLBモデル表示
-- `src/three/MprPlaneOverlay.js`: MPR CanvasTexture、MPRプレーンMesh、境界線表示の管理
-- `src/three/ModelVisibilityShaderController.js`: MPRプレーン前景側モデル透過shaderの管理
-- `src/three/ThreeCameraController.js`: `eyeThree`、`targetThree`、`upThree`、`nThree` 取得
-- `src/three/ThreeDicomCoordinateMapper.js`: Three.js座標とVolume座標の点/ベクトル変換
-- `src/three/DynamicMprController.js`: Three.js入力からMPR生成への連携
-- `src/three/MprUpdateScheduler.js`: `requestAnimationFrame` による更新集約
-
-## 3Dモデル
-
-`OBJモデル` から `.obj`、`GLBモデル` から `.glb` を選ぶと、Three.jsシーンへ読み込みます。`3Dモデル` パネルで中心合わせ、Scale、Opacity、位置、回転、モデル連動MPRを調整できます。
-
-Volumeと既に同じ座標系で作られたモデルをそのまま重ねたい場合は、`注視点へ中心合わせ` をOFF、`Scale = 1`、`位置 = 0,0,0`、`回転 = 0,0,0` にしてください。Three.jsの1単位は1 mmとして扱います。
-
-GLB読込後も、通常のカメラ操作ではカメラ前方固定距離のMPRを更新します。外部texture付きGLBは`GLB＋テクスチャ選択`からフォルダごと選択してください。`モデル連動MPR` がONでも、MPR中心はモデル中心固定にはしません。モデル中心は `modelCenterThree` としてデバッグ表示し、MPR中心は `targetThree` / `targetVolume` として表示します。
-
-MPRプレーンがモデル内部に入り込む場合は、`前景透過` をONにしておくと、カメラ手前側のモデルだけがAlpha Hashで間引かれ、MPR断面を見やすくできます。`前景Alpha = 0` 又は`完全切断`では手前側fragmentをdiscardします。通常のalpha blendと違い、GLB全体を`depthWrite = false`にしないため、単一mesh内の内部面が描画順だけで手前へ合成される問題を抑えます。
-
-可視光モデルの断面にCT/MHA由来MPRを直感的に重ねたい場合は、`CT値しきい値透過` をONにして、空気や低吸収域に相当する値を透明化してください。例えばCTなら `-500` 付近を初期確認値として使えます。
-
-OBJは単体 `.obj` のみ対応です。`.mtl`、OBJ外部テクスチャ、複数ファイル一括読込は未対応です。GLBは埋め込みresourceを持つ単一`.glb`に加え、`GLB＋テクスチャ選択`時はGLBが相対パスで参照する同一フォルダ配下のtexture等に対応します。外部`.gltf + .bin + texture`、Draco、KTX2は未対応です。
+- 研究・技術検証段階のPoCです。
+- 診断用途の医療機器ソフトウェアではありません。
+- 臨床的な有用性、精度、安全性は今後の検証対象です。
+- 公開デモには果物のデータのみを使用しています。
+- ライセンスは現在未設定です。利用・改変・再配布を希望する場合は、事前にリポジトリ所有者へ確認してください。
 
 ## テスト
 
-`tests.html`を開くと、ベクトル計算、直交性、座標変換、補間、Window処理、Three.js-Volume座標変換、カメラclip範囲、MHA Loaderの最小単体テストを実行します。
+- `http://localhost:5173/tests.html` を開くと、座標変換・補間・MHA読込などの単体テストを実行できます。
+- 現在のテスト数は32件です。
