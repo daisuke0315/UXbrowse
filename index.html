@@ -53,20 +53,6 @@
         <details class="file-menu">
           <summary>データ読込</summary>
           <div class="file-actions">
-            <section class="file-category file-category-demo" aria-labelledby="demoDataHeading">
-              <div class="file-category-heading">
-                <span class="file-category-mark" aria-hidden="true"></span>
-                <div>
-                  <strong id="demoDataHeading">デモデータ</strong>
-                  <small>モデルとCTをセットで読み込む</small>
-                </div>
-              </div>
-              <div class="file-category-buttons">
-                <button id="mikanDemoBtn" type="button">みかん</button>
-                <button id="bananaDemoBtn" type="button">バナナ</button>
-              </div>
-            </section>
-
             <section class="file-category file-category-volume" aria-labelledby="volumeDataHeading">
               <div class="file-category-heading">
                 <span class="file-category-mark" aria-hidden="true"></span>
@@ -125,14 +111,20 @@
 
       <section class="workspace controls-collapsed">
         <button id="controlsToggleBtn" class="controls-toggle" type="button" aria-expanded="false">For Specialist</button>
-        <button id="observationLockBtn" class="observation-lock" type="button" aria-pressed="false" aria-label="現在の状態をロック" title="現在の状態をロック">
-          <svg class="lock-icon lock-icon-closed" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12v10H6z"/>
-          </svg>
-          <svg class="lock-icon lock-icon-open" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M7 10V7a5 5 0 0 1 9.5-2M6 10h12v10H6z"/>
-          </svg>
-        </button>
+        <div class="viewer-quick-actions">
+          <button id="observationLockBtn" class="observation-lock" type="button" aria-pressed="false" aria-label="現在の状態をロック" title="現在の状態をロック">
+            <svg class="lock-icon lock-icon-closed" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 10V7a5 5 0 0 1 10 0v3M6 10h12v10H6z"/>
+            </svg>
+            <svg class="lock-icon lock-icon-open" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 10V7a5 5 0 0 1 9.5-2M6 10h12v10H6z"/>
+            </svg>
+          </button>
+          <div class="demo-quick-switch" aria-label="デモデータ切替">
+            <button id="mikanDemoBtn" type="button" title="みかんデモを読み込む">みかん</button>
+            <button id="bananaDemoBtn" type="button" title="バナナデモを読み込む">バナナ</button>
+          </div>
+        </div>
         <div class="viewer-pane">
           <div class="three-pane">
             <div id="threeViewport" class="three-viewport" aria-label="Three.js表示領域">
@@ -374,6 +366,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=banana-demo-1"></script>
+    <script type="module" src="./src/main.js?v=banana-demo-2"></script>
   </body>
 </html>

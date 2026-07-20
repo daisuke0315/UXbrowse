@@ -391,11 +391,6 @@ p {
   box-shadow: 0 0 14px rgb(129 140 248 / 0.28);
 }
 
-.file-category-demo .file-category-mark {
-  background: linear-gradient(180deg, #fbbf24, #fb7185);
-  box-shadow: 0 0 14px rgb(251 191 36 / 0.24);
-}
-
 .file-category-buttons {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -695,11 +690,17 @@ summary:focus-visible {
   opacity: 0.38;
 }
 
-.observation-lock {
+.viewer-quick-actions {
   position: absolute;
   z-index: 15;
   top: 14px;
   left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.observation-lock {
   width: 40px;
   min-width: 40px;
   height: 40px;
@@ -707,6 +708,31 @@ summary:focus-visible {
   border-color: rgb(148 178 196 / 0.28);
   background: rgb(10 18 25 / 0.88);
   color: #c2d3db;
+}
+
+.demo-quick-switch {
+  display: flex;
+  gap: 5px;
+  padding: 3px;
+  border: 1px solid rgb(148 178 196 / 0.18);
+  border-radius: 10px;
+  background: rgb(10 18 25 / 0.78);
+  backdrop-filter: blur(14px);
+}
+
+.demo-quick-switch button {
+  height: 34px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  background: transparent;
+}
+
+.demo-quick-switch button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+  transform: none;
 }
 
 .observation-lock .lock-icon {

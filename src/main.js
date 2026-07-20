@@ -28,6 +28,7 @@ const DEMO_DATASETS = Object.freeze({
   mikan: {
     id: "mikan",
     name: "みかん",
+    mprDistance: 300,
     modelFileName: "mikan.glb",
     volumeFileName: "mikan-volume.mha",
     glbUrl: "./data/mikan/mikan.glb?v=1",
@@ -37,6 +38,7 @@ const DEMO_DATASETS = Object.freeze({
   banana: {
     id: "banana",
     name: "バナナ",
+    mprDistance: 300,
     modelFileName: "banana.glb",
     volumeFileName: "banana-volume.mha",
     glbUrl: "./data/banana/banana.glb?v=1",
@@ -176,8 +178,8 @@ els.objInput.addEventListener("change", () => runManualFromFileMenu(() => handle
 els.glbInput.addEventListener("change", () => runManualFromFileMenu(() => handleGlbFile(els.glbInput.files?.[0])));
 els.glbFolderInput.addEventListener("change", () => runManualFromFileMenu(() => handleGlbFolder(els.glbFolderInput.files)));
 els.textureInput.addEventListener("change", () => runManualFromFileMenu(() => handleTextureFile(els.textureInput.files?.[0])));
-els.mikanDemoBtn.addEventListener("click", () => runManualFromFileMenu(() => loadBundledDemo(DEMO_DATASETS.mikan)));
-els.bananaDemoBtn.addEventListener("click", () => runManualFromFileMenu(() => loadBundledDemo(DEMO_DATASETS.banana)));
+els.mikanDemoBtn.addEventListener("click", () => loadDemoFromToolbar(DEMO_DATASETS.mikan));
+els.bananaDemoBtn.addEventListener("click", () => loadDemoFromToolbar(DEMO_DATASETS.banana));
 els.demoVolumeBtn.addEventListener("click", () => runManualFromFileMenu(loadDemoVolume));
 document.addEventListener("pointerdown", (event) => {
   if (els.fileMenu.open && !els.fileMenu.contains(event.target)) {
@@ -261,7 +263,22 @@ function runFromFileMenu(action) {
 
 function runManualFromFileMenu(action) {
   cancelStartupDemo();
+  setActiveDemoButton(null);
   return runFromFileMenu(action);
+}
+
+function loadDemoFromToolbar(demo) {
+  if (state.observationLocked) return;
+  cancelStartupDemo();
+  els.fileMenu.open = false;
+  void loadBundledDemo(demo);
+}
+
+function setActiveDemoButton(demoId) {
+  for (const [id, button] of [["mikan", els.mikanDemoBtn], ["banana", els.bananaDemoBtn]]) {
+    button.classList.toggle("is-active", id === demoId);
+    button.setAttribute("aria-pressed", String(id === demoId));
+  }
 }
 
 function cancelStartupDemo() {
@@ -315,6 +332,8 @@ function toggleObservationLock() {
   els.fileMenu.inert = locking;
   els.fileMenu.querySelector("summary")?.setAttribute("aria-disabled", String(locking));
   els.controlsToggleBtn.disabled = locking;
+  els.mikanDemoBtn.disabled = locking;
+  els.bananaDemoBtn.disabled = locking;
   setContainerControlsLocked(els.controlsPane, locking);
   setContainerControlsLocked(els.fileMenu, locking);
   els.observationLockBtn.setAttribute("aria-pressed", String(locking));
@@ -784,6 +803,7 @@ async function loadBundledDemo(demo, { startup = false } = {}) {
   state.startupDemoLoading = true;
   const startedAt = performance.now();
   try {
+    setMprDistanceValue(demo.mprDistance);
     updateStartupLoading(demo, "model", "3Dモデルを読み込んでいます...");
     els.statusText.textContent = `${demo.name}デモのモデルを読込中...`;
     const glbBuffer = await fetchArrayBuffer(demo.glbUrl);
@@ -821,6 +841,7 @@ async function loadBundledDemo(demo, { startup = false } = {}) {
     state.threeScene.focusObjModelAtDistance(readFloat(els.objMprDistance, DEFAULT_MPR_DISTANCE));
     updateSeriesInfo();
     requestLinkedMpr(`demo-${demo.id}`);
+    setActiveDemoButton(demo.id);
     els.statusText.textContent = `${demo.name}デモ読込完了`;
     logger.info("デモデータを読み込みました", {
       demo: demo.id,
@@ -980,11 +1001,16 @@ function applyInteractionControls() {
 
 function applyMprDistanceControl(source) {
   const sourceInput = source === "number" ? els.objMprDistanceValue : els.objMprDistance;
-  const distance = Math.max(MPR_DISTANCE_MIN, Math.min(MPR_DISTANCE_MAX, Math.round(readFloat(sourceInput, DEFAULT_MPR_DISTANCE) / 10) * 10));
-  els.objMprDistance.value = String(distance);
-  els.objMprDistanceValue.value = String(distance);
+  setMprDistanceValue(readFloat(sourceInput, DEFAULT_MPR_DISTANCE));
   requestLinkedMpr("mpr-distance");
   writeDiagnostics();
+}
+
+function setMprDistanceValue(value) {
+  const distance = Math.max(MPR_DISTANCE_MIN, Math.min(MPR_DISTANCE_MAX, Math.round(value / 10) * 10));
+  els.objMprDistance.value = String(distance);
+  els.objMprDistanceValue.value = String(distance);
+  return distance;
 }
 
 function applyMprThresholdControl(source) {
