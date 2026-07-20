@@ -1,0 +1,14 @@
+[server]
+maxUploadSize = 4096
+showEmailPrompt = false
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#c86f3e"
+backgroundColor = "#f4f1eb"
+secondaryBackgroundColor = "#ebe6dc"
+textColor = "#1e2927"
+font = "sans serif"

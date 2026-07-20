@@ -1,0 +1,3 @@
+numpy>=1.24
+pydicom>=2.4
+PyQt6>=6.5

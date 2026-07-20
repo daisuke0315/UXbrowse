@@ -2,6 +2,17 @@
 
 外観モデル連動MPRビューア
 
+## Python DICOM Viewer
+
+ローカル閲覧用デスクトップアプリを `tools/dicom_viewer.py` に用意しています。DICOMファイル／フォルダ読込、同一フォルダ内のシリーズ切替、シリーズの物理位置順ソート、Axial・Coronal・Sagittalの連動MPR、十字フォーカスマーカー、ボクセル／Patient座標ログ、Window Level / Width調整、個別ビューのズーム、白黒反転、DICOMタグ表示に対応します。フォルダ選択時は最初にヘッダだけを走査し、選択したシリーズから3断面用ボリュームを構築します。
+
+```bash
+python3 -m pip install -r tools/requirements_dicom_viewer.txt
+python3 tools/dicom_viewer.py
+```
+
+macOSでは `tools/start_dicom_viewer.command` をダブルクリックすると、初回だけ専用の仮想環境と依存関係を自動セットアップして起動します。各断面には専用の横スライダーがあります。十字中心の左ドラッグでフォーカス追従、それ以外の左ドラッグで画像パン、ホイールで各断面移動、トラックパッドのピンチまたはCtrl+ホイールで対象ビューをズーム、ダブルクリックで表示をリセットします。閲覧・研究用途の試作であり、診断用途の医療機器ソフトウェアではありません。
+
 ## ドキュメント
 
 - [プロジェクト概要](docs/project-overview.md): 開発背景、解決したい課題、基本コンセプト、想定用途

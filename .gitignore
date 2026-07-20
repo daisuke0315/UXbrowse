@@ -183,3 +183,7 @@ coverage/
 過去の開発/dicomForUnity-main/.gitattributes
 過去の開発/UnityPhotGra-main/ProjectSettings/UnityConnectSettings.asset
 過去の開発/UnityPhotGra-main/ProjectSettings/XRSettings.asset
+.venv/
+.streamlit/*.log
+.streamlit/*.pid
+tools/.dicom_viewer_venv/
