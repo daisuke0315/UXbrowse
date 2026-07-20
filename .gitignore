@@ -2,13 +2,19 @@
 **/.DS_Store
 
 # Local medical/model data should not be committed by default.
-# Only the public mikan demo assets are intentionally published.
+# Only the public bundled demo assets are intentionally published.
 data/*
 !data/.gitkeep
 !data/mikan/
 data/mikan/*
 !data/mikan/mikan.glb
 !data/mikan/volume_preprocessed.mha.gz
+!data/mikan/volume_preprocessed.model-bounds.mha
+!data/banana/
+data/banana/*
+!data/banana/banana.glb
+!data/banana/volume_preprocessed.mha.gz
+!data/banana/volume_preprocessed.model-bounds.mha
 
 # Runtime and editor artifacts.
 node_modules/

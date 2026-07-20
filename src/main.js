@@ -24,11 +24,27 @@ const MPR_DISTANCE_MIN = 50;
 const MPR_DISTANCE_MAX = 1200;
 const MPR_THRESHOLD_MIN = -1200;
 const MPR_THRESHOLD_MAX = 500;
-const STARTUP_DEMO = {
-  name: "みかん",
-  glbUrl: "./data/mikan/mikan.glb",
-  mhaUrl: "./data/mikan/volume_preprocessed.mha.gz",
-};
+const DEMO_DATASETS = Object.freeze({
+  mikan: {
+    id: "mikan",
+    name: "みかん",
+    modelFileName: "mikan.glb",
+    volumeFileName: "mikan-volume.mha",
+    glbUrl: "./data/mikan/mikan.glb?v=1",
+    mhaUrl: "./data/mikan/volume_preprocessed.mha.gz?v=model-bounds-2",
+    mhaFallbackUrl: "./data/mikan/volume_preprocessed.model-bounds.mha?v=model-bounds-1",
+  },
+  banana: {
+    id: "banana",
+    name: "バナナ",
+    modelFileName: "banana.glb",
+    volumeFileName: "banana-volume.mha",
+    glbUrl: "./data/banana/banana.glb?v=1",
+    mhaUrl: "./data/banana/volume_preprocessed.mha.gz?v=model-bounds-1",
+    mhaFallbackUrl: "./data/banana/volume_preprocessed.model-bounds.mha?v=model-bounds-1",
+  },
+});
+const STARTUP_DEMO = DEMO_DATASETS.mikan;
 // MPRキャンバスは読影用の正表示を維持し、Three.js重畳面で生じる
 // CanvasTexture／裏面表示のU/V差だけをtexture座標で補正する。
 // The PiP monitor previews the actual overlay texture; only V is flipped by default.
@@ -69,6 +85,8 @@ const els = {
   glbInput: document.querySelector("#glbInput"),
   glbFolderInput: document.querySelector("#glbFolderInput"),
   textureInput: document.querySelector("#textureInput"),
+  mikanDemoBtn: document.querySelector("#mikanDemoBtn"),
+  bananaDemoBtn: document.querySelector("#bananaDemoBtn"),
   demoVolumeBtn: document.querySelector("#demoVolumeBtn"),
   statusText: document.querySelector("#statusText"),
   fileMenu: document.querySelector(".file-menu"),
@@ -158,6 +176,8 @@ els.objInput.addEventListener("change", () => runManualFromFileMenu(() => handle
 els.glbInput.addEventListener("change", () => runManualFromFileMenu(() => handleGlbFile(els.glbInput.files?.[0])));
 els.glbFolderInput.addEventListener("change", () => runManualFromFileMenu(() => handleGlbFolder(els.glbFolderInput.files)));
 els.textureInput.addEventListener("change", () => runManualFromFileMenu(() => handleTextureFile(els.textureInput.files?.[0])));
+els.mikanDemoBtn.addEventListener("click", () => runManualFromFileMenu(() => loadBundledDemo(DEMO_DATASETS.mikan)));
+els.bananaDemoBtn.addEventListener("click", () => runManualFromFileMenu(() => loadBundledDemo(DEMO_DATASETS.banana)));
 els.demoVolumeBtn.addEventListener("click", () => runManualFromFileMenu(loadDemoVolume));
 document.addEventListener("pointerdown", (event) => {
   if (els.fileMenu.open && !els.fileMenu.contains(event.target)) {
@@ -249,13 +269,13 @@ function cancelStartupDemo() {
   state.startupDemoToken += 1;
   state.startupDemoLoading = false;
   hideStartupLoading();
-  logger.info("手動読込を優先し、初期みかんデモの読込を中止しました");
+  logger.info("手動読込を優先し、初期デモの読込を中止しました");
 }
 
-function updateStartupLoading(step, detail) {
+function updateStartupLoading(demo, step, detail) {
   if (!els.startupLoading) return;
   els.startupLoading.classList.remove("is-hidden");
-  els.startupLoadingTitle.textContent = `${STARTUP_DEMO.name}デモを読み込んでいます`;
+  els.startupLoadingTitle.textContent = `${demo.name}デモを読み込んでいます`;
   els.startupLoadingDetail.textContent = detail;
   const order = ["model", "ct", "display"];
   const activeIndex = order.indexOf(step);
@@ -748,7 +768,7 @@ async function initThree() {
     state.threeScene.onControlsChange(() => requestLinkedMpr("camera"));
     if (state.volume) configureThreeForVolume(state.volume);
     writeDiagnostics();
-    void loadStartupMikanDemo();
+    void loadBundledDemo(STARTUP_DEMO, { startup: true });
   } catch (error) {
     state.threeReady = false;
     els.threeViewport.innerHTML = `<div class="three-placeholder">Three.jsを読み込めませんでした。静的MPRは利用できます。<br>${escapeHtml(error.message)}</div>`;
@@ -758,53 +778,66 @@ async function initThree() {
   }
 }
 
-async function loadStartupMikanDemo() {
+async function loadBundledDemo(demo, { startup = false } = {}) {
   const token = state.startupDemoToken + 1;
   state.startupDemoToken = token;
   state.startupDemoLoading = true;
   const startedAt = performance.now();
   try {
-    updateStartupLoading("model", "3Dモデルを読み込んでいます...");
-    els.statusText.textContent = `${STARTUP_DEMO.name}デモのモデルを読込中...`;
-    const glbBuffer = await fetchArrayBuffer(STARTUP_DEMO.glbUrl);
+    updateStartupLoading(demo, "model", "3Dモデルを読み込んでいます...");
+    els.statusText.textContent = `${demo.name}デモのモデルを読込中...`;
+    const glbBuffer = await fetchArrayBuffer(demo.glbUrl);
     if (token !== state.startupDemoToken) return;
-    await state.threeScene.loadGlbArrayBuffer(glbBuffer, "mikan.glb", getObjOptions());
+    await state.threeScene.loadGlbArrayBuffer(glbBuffer, demo.modelFileName, getObjOptions());
     if (token !== state.startupDemoToken) return;
 
     // 先にモデルの描画機会を作り、その後に大容量CTを読み込む。
     await new Promise((resolve) => requestAnimationFrame(resolve));
-    updateStartupLoading("ct", "CTデータを読み込んでいます（しばらくお待ちください）...");
-    els.statusText.textContent = `${STARTUP_DEMO.name}デモのCTを読込中...`;
-    const compressedMhaBuffer = await fetchArrayBuffer(STARTUP_DEMO.mhaUrl);
+    let mhaBuffer;
+    try {
+      updateStartupLoading(demo, "ct", "圧縮CTデータを読み込んでいます...");
+      els.statusText.textContent = `${demo.name}デモのCTを読込中...`;
+      const compressedMhaBuffer = await fetchArrayBuffer(demo.mhaUrl);
+      if (token !== state.startupDemoToken) return;
+      updateStartupLoading(demo, "ct", "CTデータをバックグラウンドで展開しています...");
+      els.statusText.textContent = `${demo.name}デモのCTを展開中...`;
+      mhaBuffer = await decompressGzipArrayBuffer(compressedMhaBuffer);
+    } catch (compressedError) {
+      if (token !== state.startupDemoToken) return;
+      logger.warn("圧縮CTを利用できないため非圧縮データへ切り替えます", {
+        demo: demo.id,
+        message: compressedError.message,
+      });
+      updateStartupLoading(demo, "ct", "互換モードでCTデータを読み込んでいます...");
+      els.statusText.textContent = `${demo.name}デモのCTを互換モードで読込中...`;
+      mhaBuffer = await fetchArrayBuffer(demo.mhaFallbackUrl);
+    }
     if (token !== state.startupDemoToken) return;
-    updateStartupLoading("ct", "CTデータをバックグラウンドで展開しています...");
-    els.statusText.textContent = `${STARTUP_DEMO.name}デモのCTを展開中...`;
-    const mhaBuffer = await decompressGzipArrayBuffer(compressedMhaBuffer);
-    if (token !== state.startupDemoToken) return;
-    state.volume = mhaLoader.parse(mhaBuffer, "volume_preprocessed.mha");
-    updateStartupLoading("display", "断面画像と3D表示を準備しています...");
+    state.volume = mhaLoader.parse(mhaBuffer, demo.volumeFileName);
+    updateStartupLoading(demo, "display", "断面画像と3D表示を準備しています...");
     state.result = null;
     installVolumeDefaults(state.volume);
     configureThreeForVolume(state.volume);
     state.threeScene.focusObjModelAtDistance(readFloat(els.objMprDistance, DEFAULT_MPR_DISTANCE));
     updateSeriesInfo();
-    requestLinkedMpr("startup-mikan");
-    els.statusText.textContent = `${STARTUP_DEMO.name}デモ読込完了`;
-    logger.info("初期みかんデモを読み込みました", {
-      glb: STARTUP_DEMO.glbUrl,
-      mha: STARTUP_DEMO.mhaUrl,
+    requestLinkedMpr(`demo-${demo.id}`);
+    els.statusText.textContent = `${demo.name}デモ読込完了`;
+    logger.info("デモデータを読み込みました", {
+      demo: demo.id,
+      glb: demo.glbUrl,
+      mha: demo.mhaUrl,
       ms: Math.round(performance.now() - startedAt),
     });
     writeDiagnostics();
   } catch (error) {
     if (token !== state.startupDemoToken) return;
     const missing = error.status === 404;
-    if (missing) {
-      logger.warn("初期みかんデモが見つからないため通常起動します", { message: error.message });
+    if (missing && startup) {
+      logger.warn("初期デモが見つからないため通常起動します", { demo: demo.id, message: error.message });
       els.statusText.textContent = "待機中";
     } else {
-      logger.error("初期みかんデモの読込に失敗しました", { message: error.message });
-      els.statusText.textContent = `みかんデモ読込失敗: ${error.message}`;
+      logger.error("デモデータの読込に失敗しました", { demo: demo.id, message: error.message });
+      els.statusText.textContent = `${demo.name}デモ読込失敗: ${error.message}`;
     }
   } finally {
     if (token === state.startupDemoToken) {
@@ -827,19 +860,32 @@ async function fetchArrayBuffer(url) {
 async function decompressGzipArrayBuffer(compressedBuffer) {
   if (typeof Worker !== "undefined") {
     return new Promise((resolve, reject) => {
-      const workerUrl = new URL("./workers/GzipDecompressionWorker.js?v=mikan-gzip-1", import.meta.url);
+      const workerUrl = new URL("./workers/GzipDecompressionWorker.js?v=demo-fallback-1", import.meta.url);
       const worker = new Worker(workerUrl, { type: "module" });
-      worker.addEventListener("message", (event) => {
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
         worker.terminate();
+        callback(value);
+      };
+      const timeoutId = setTimeout(() => {
+        finish(reject, new Error("CTデータの展開がタイムアウトしました"));
+      }, 12000);
+      worker.addEventListener("message", (event) => {
         if (event.data?.error) {
-          reject(new Error(event.data.error));
+          finish(reject, new Error(event.data.error));
           return;
         }
-        resolve(event.data.buffer);
+        if (!(event.data?.buffer instanceof ArrayBuffer)) {
+          finish(reject, new Error("展開後のCTデータが不正です"));
+          return;
+        }
+        finish(resolve, event.data.buffer);
       }, { once: true });
       worker.addEventListener("error", (event) => {
-        worker.terminate();
-        reject(new Error(`CTデータの展開に失敗しました: ${event.message || "Worker error"}`));
+        finish(reject, new Error(`CTデータの展開に失敗しました: ${event.message || "Worker error"}`));
       }, { once: true });
       worker.postMessage({ buffer: compressedBuffer }, [compressedBuffer]);
     });

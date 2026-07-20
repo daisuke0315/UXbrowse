@@ -53,6 +53,20 @@
         <details class="file-menu">
           <summary>データ読込</summary>
           <div class="file-actions">
+            <section class="file-category file-category-demo" aria-labelledby="demoDataHeading">
+              <div class="file-category-heading">
+                <span class="file-category-mark" aria-hidden="true"></span>
+                <div>
+                  <strong id="demoDataHeading">デモデータ</strong>
+                  <small>モデルとCTをセットで読み込む</small>
+                </div>
+              </div>
+              <div class="file-category-buttons">
+                <button id="mikanDemoBtn" type="button">みかん</button>
+                <button id="bananaDemoBtn" type="button">バナナ</button>
+              </div>
+            </section>
+
             <section class="file-category file-category-volume" aria-labelledby="volumeDataHeading">
               <div class="file-category-heading">
                 <span class="file-category-mark" aria-hidden="true"></span>
@@ -360,6 +374,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=mikan-gzip-1"></script>
+    <script type="module" src="./src/main.js?v=banana-demo-1"></script>
   </body>
 </html>

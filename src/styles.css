@@ -391,6 +391,11 @@ p {
   box-shadow: 0 0 14px rgb(129 140 248 / 0.28);
 }
 
+.file-category-demo .file-category-mark {
+  background: linear-gradient(180deg, #fbbf24, #fb7185);
+  box-shadow: 0 0 14px rgb(251 191 36 / 0.24);
+}
+
 .file-category-buttons {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
