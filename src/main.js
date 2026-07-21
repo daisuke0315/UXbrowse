@@ -844,6 +844,8 @@ async function loadBundledDemo(demo, { startup = false } = {}) {
     updateStartupLoading(demo, "display", "断面画像と3D表示を準備しています...");
     state.result = null;
     installVolumeDefaults(state.volume);
+    setWindowValues(40, 400);
+    els.windowPreset.value = "soft";
     configureThreeForVolume(state.volume);
     state.threeScene.focusObjModelAtDistance(readFloat(els.objMprDistance, DEFAULT_MPR_DISTANCE));
     updateSeriesInfo();
