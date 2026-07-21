@@ -259,8 +259,26 @@
             <summary>MPR表示</summary>
           <fieldset>
             <legend>Window</legend>
-            <label>WL <input id="windowLevel" type="number" step="1" value="40"></label>
-            <label>WW <input id="windowWidth" type="number" step="1" min="1" value="400"></label>
+            <label class="range-control" for="windowLevel">
+              <span>
+                WL
+                <span class="range-value-editor">
+                  <input id="windowLevelValue" type="number" min="-2000" max="3000" step="1" value="40" aria-label="Window Levelの数値">
+                  <span>HU</span>
+                </span>
+              </span>
+              <input id="windowLevel" type="range" min="-2000" max="3000" step="1" value="40">
+            </label>
+            <label class="range-control" for="windowWidth">
+              <span>
+                WW
+                <span class="range-value-editor">
+                  <input id="windowWidthValue" type="number" min="1" max="5000" step="1" value="400" aria-label="Window Widthの数値">
+                  <span>HU</span>
+                </span>
+              </span>
+              <input id="windowWidth" type="range" min="1" max="5000" step="1" value="400">
+            </label>
             <select id="windowPreset">
               <option value="">プリセット</option>
               <option value="soft">軟部条件</option>
@@ -357,6 +375,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=settings-data-import-1"></script>
+    <script type="module" src="./src/main.js?v=window-sliders-1"></script>
   </body>
 </html>

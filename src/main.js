@@ -24,6 +24,9 @@ const MPR_DISTANCE_MIN = 50;
 const MPR_DISTANCE_MAX = 1200;
 const MPR_THRESHOLD_MIN = -1200;
 const MPR_THRESHOLD_MAX = 500;
+const WINDOW_LEVEL_MIN = -2000;
+const WINDOW_LEVEL_MAX = 3000;
+const WINDOW_WIDTH_MAX = 5000;
 const DEMO_DATASETS = Object.freeze({
   mikan: {
     id: "mikan",
@@ -126,7 +129,9 @@ const els = {
   flipVolumeZBtn: document.querySelector("#flipVolumeZBtn"),
   resetVolumeFlipBtn: document.querySelector("#resetVolumeFlipBtn"),
   windowLevel: document.querySelector("#windowLevel"),
+  windowLevelValue: document.querySelector("#windowLevelValue"),
   windowWidth: document.querySelector("#windowWidth"),
+  windowWidthValue: document.querySelector("#windowWidthValue"),
   windowPreset: document.querySelector("#windowPreset"),
   mprWidth: document.querySelector("#mprWidth"),
   mprHeight: document.querySelector("#mprHeight"),
@@ -237,6 +242,10 @@ for (const input of [els.mprWidth, els.mprHeight, els.spacingU, els.spacingV]) {
   input.addEventListener("change", updateMprFovControlsFromInputs);
 }
 els.windowPreset.addEventListener("change", applyWindowPreset);
+els.windowLevel.addEventListener("input", () => applyWindowControl("level", "range"));
+els.windowLevelValue.addEventListener("change", () => applyWindowControl("level", "number"));
+els.windowWidth.addEventListener("input", () => applyWindowControl("width", "range"));
+els.windowWidthValue.addEventListener("change", () => applyWindowControl("width", "number"));
 for (const input of document.querySelectorAll("input, select")) {
   input.addEventListener("change", () => {
     if (!state.volume || input.type === "file") return;
@@ -675,8 +684,7 @@ function loadDemoVolume() {
   installVolumeDefaults(state.volume);
   configureThreeForVolume(state.volume);
   updateSeriesInfo();
-  els.windowLevel.value = 40;
-  els.windowWidth.value = 900;
+  setWindowValues(40, 900);
   if (state.dynamicController) {
     requestLinkedMpr("demo");
   } else {
@@ -766,8 +774,8 @@ function installVolumeDefaults(volume) {
   setVector("eye", preset.eye);
   setVector("target", preset.target);
   setVector("up", preset.up);
-  els.windowLevel.value = state.defaults.wl;
-  els.windowWidth.value = state.defaults.ww;
+  configureWindowControlBounds(volume);
+  setWindowValues(state.defaults.wl, state.defaults.ww);
   els.normalOffset.value = 0;
 }
 
@@ -1096,9 +1104,50 @@ function applyWindowPreset() {
   };
   const preset = presets[els.windowPreset.value];
   if (!preset) return;
-  els.windowLevel.value = preset[0];
-  els.windowWidth.value = preset[1];
+  setWindowValues(preset[0], preset[1]);
   render();
+}
+
+function applyWindowControl(kind, source) {
+  const isLevel = kind === "level";
+  const sourceInput = isLevel
+    ? (source === "number" ? els.windowLevelValue : els.windowLevel)
+    : (source === "number" ? els.windowWidthValue : els.windowWidth);
+  const level = isLevel ? readFloat(sourceInput, 40) : readFloat(els.windowLevel, 40);
+  const width = isLevel ? readFloat(els.windowWidth, 400) : readFloat(sourceInput, 400);
+  setWindowValues(level, width);
+  els.windowPreset.value = "";
+  if (!state.volume) return;
+  if (state.dynamicController) requestLinkedMpr(`window-${kind}`);
+  else render();
+}
+
+function setWindowValues(level, width) {
+  const levelMin = readFloat({ value: els.windowLevel.min }, WINDOW_LEVEL_MIN);
+  const levelMax = readFloat({ value: els.windowLevel.max }, WINDOW_LEVEL_MAX);
+  const widthMax = readFloat({ value: els.windowWidth.max }, WINDOW_WIDTH_MAX);
+  const normalizedLevel = Math.max(levelMin, Math.min(levelMax, Math.round(level)));
+  const normalizedWidth = Math.max(1, Math.min(widthMax, Math.round(width)));
+  els.windowLevel.value = String(normalizedLevel);
+  els.windowLevelValue.value = String(normalizedLevel);
+  els.windowWidth.value = String(normalizedWidth);
+  els.windowWidthValue.value = String(normalizedWidth);
+}
+
+function configureWindowControlBounds(volume) {
+  const minimum = volume.metadata.minimumValue ?? volume.metadata.minimumHU ?? WINDOW_LEVEL_MIN;
+  const maximum = volume.metadata.maximumValue ?? volume.metadata.maximumHU ?? WINDOW_LEVEL_MAX;
+  const levelMin = Math.floor(Math.min(WINDOW_LEVEL_MIN, minimum));
+  const levelMax = Math.ceil(Math.max(WINDOW_LEVEL_MAX, maximum));
+  const widthMax = Math.ceil(Math.max(WINDOW_WIDTH_MAX, maximum - minimum));
+  for (const input of [els.windowLevel, els.windowLevelValue]) {
+    input.min = String(levelMin);
+    input.max = String(levelMax);
+  }
+  for (const input of [els.windowWidth, els.windowWidthValue]) {
+    input.min = "1";
+    input.max = String(widthMax);
+  }
 }
 
 function updateSeriesInfo() {
