@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">ViewSync loading logo</title>
+  <desc id="description">A synchronized viewing plane crossing a three-dimensional volume.</desc>
+  <g transform="scale(10.6666666667)">
+    <path
+      d="M24 4.5 40.5 14v20L24 43.5 7.5 34V14L24 4.5Z"
+      fill="#09131c"
+      stroke="#7895a3"
+      stroke-width="1.5"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M10.5 27.2 24 19.3l13.5 7.9L24 35.1 10.5 27.2Z"
+      fill="#38d9e9"
+      fill-opacity="0.86"
+      stroke="#d9fbff"
+      stroke-opacity="0.7"
+      stroke-width="1.1"
+      stroke-linejoin="round"
+    />
+    <circle
+      cx="24"
+      cy="27.2"
+      r="3.2"
+      fill="#f8fafc"
+      stroke="#0f1720"
+      stroke-width="1.2"
+    />
+  </g>
+</svg>
