@@ -1,7 +1,7 @@
 import { volumeCenter, volumeDisplaySpan, volumeVoxelCenterSpan } from "../VolumeGeometry.js";
-import { ModelVisibilityShaderController } from "./ModelVisibilityShaderController.js?v=oit-default-1";
+import { ModelVisibilityShaderController } from "./ModelVisibilityShaderController.js?v=locked-foreground-side-1";
 import { MprPlaneOverlay } from "./MprPlaneOverlay.js?v=overlay-preview-2";
-import { WeightedBlendedOitRenderer } from "./WeightedBlendedOitRenderer.js?v=oit-default-1";
+import { WeightedBlendedOitRenderer } from "./WeightedBlendedOitRenderer.js?v=locked-foreground-side-1";
 
 export class ThreeSceneManager {
   constructor(container, config, logger) {
@@ -16,11 +16,13 @@ export class ThreeSceneManager {
     this.controlsInteracting = false;
     this.inertiaFramesRemaining = 0;
     this.currentPixelRatio = 1;
+    this.foregroundSideSign = 0;
     this.foregroundOptions = {
       enabled: false,
       frontAlpha: 0.15,
       foregroundDistance: 0,
       fadeWidth: 10,
+      fixedFrontSide: 0,
       transparencyMode: "auto",
     };
   }
@@ -584,11 +586,26 @@ export class ThreeSceneManager {
       frontAlpha,
       foregroundDistance,
       fadeWidth,
+      fixedFrontSide: this.foregroundSideSign,
       transparencyMode: "auto",
     };
     this.modelVisibility.setOptions(this.foregroundOptions);
     if (this.objModel) this.modelVisibility.applyToObject(this.objModel, this.foregroundOptions);
     this.requestRender();
+  }
+
+  setForegroundSideLocked(locked) {
+    if (locked && this.camera && this.modelVisibility) {
+      const cameraOffset = this.camera.position.clone().sub(this.modelVisibility.planeCenter);
+      const cameraSide = cameraOffset.dot(this.modelVisibility.planeNormal);
+      this.foregroundSideSign = cameraSide < 0 ? -1 : 1;
+    } else {
+      this.foregroundSideSign = 0;
+    }
+    this.foregroundOptions.fixedFrontSide = this.foregroundSideSign;
+    this.modelVisibility?.setOptions(this.foregroundOptions);
+    this.requestRender();
+    return this.foregroundSideSign;
   }
 
   summarizeObject(object) {
@@ -753,6 +770,7 @@ export class ThreeSceneManager {
       }
       this.weightedOit.render(this.objModel, {
         frontAlpha,
+        fixedFrontSide: this.foregroundSideSign,
         planeCenter: this.modelVisibility.planeCenter.toArray(),
         planeNormal: this.modelVisibility.planeNormal.toArray(),
         planeU: this.modelVisibility.planeU.toArray(),

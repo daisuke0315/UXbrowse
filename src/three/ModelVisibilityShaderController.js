@@ -6,6 +6,7 @@ export class ModelVisibilityShaderController {
     this.frontAlpha = 0.15;
     this.foregroundDistance = 0;
     this.fadeWidth = 10;
+    this.fixedFrontSide = 0;
     this.planeCenter = new THREE.Vector3();
     this.planeNormal = new THREE.Vector3(0, 0, 1);
     this.planeU = new THREE.Vector3(1, 0, 0);
@@ -13,11 +14,12 @@ export class ModelVisibilityShaderController {
     this.planeHalfSize = new THREE.Vector2(1e20, 1e20);
   }
 
-  setOptions({ enabled = this.enabled, frontAlpha = this.frontAlpha, foregroundDistance = this.foregroundDistance, fadeWidth = this.fadeWidth } = {}) {
+  setOptions({ enabled = this.enabled, frontAlpha = this.frontAlpha, foregroundDistance = this.foregroundDistance, fadeWidth = this.fadeWidth, fixedFrontSide = this.fixedFrontSide } = {}) {
     this.enabled = enabled;
     this.frontAlpha = frontAlpha;
     this.foregroundDistance = foregroundDistance;
     this.fadeWidth = fadeWidth;
+    this.fixedFrontSide = fixedFrontSide;
     for (const record of this.records.values()) {
       this.updateMaterialRenderState(record);
       this.updateRecordUniforms(record);
@@ -69,6 +71,7 @@ export class ModelVisibilityShaderController {
       shader.uniforms.mprFrontAlpha = { value: this.frontAlpha };
       shader.uniforms.mprForegroundDistance = { value: this.foregroundDistance };
       shader.uniforms.mprFadeWidth = { value: this.fadeWidth };
+      shader.uniforms.mprFixedFrontSide = { value: this.fixedFrontSide };
       const status = { vertexWorldPosition: false, fragmentAlpha: false };
       shader.vertexShader = shader.vertexShader
         .replace("#include <common>", "#include <common>\nvarying vec3 vMprWorldPosition;")
@@ -103,7 +106,8 @@ export class ModelVisibilityShaderController {
         "  bool insideMprFov = mprRayHitsPlane && mprRayT > 0.0 && mprU <= mprPlaneHalfSize.x && mprV <= mprPlaneHalfSize.y;",
         "  float d = dot(mprRelative, mprN);",
         "  float cameraD = dot(cameraPosition - mprPlaneCenter, mprN);",
-        "  if (insideMprFov && d * cameraD > 0.0) {",
+        "  float frontSide = abs(mprFixedFrontSide) > 0.5 ? mprFixedFrontSide : (cameraD < 0.0 ? -1.0 : 1.0);",
+        "  if (insideMprFov && d * frontSide > 0.0) {",
         "    float distanceFromPlane = abs(d);",
         "    float frontMask = mprForegroundDistance <= 0.0001 ? 1.0 : 1.0 - smoothstep(mprForegroundDistance, mprForegroundDistance + max(mprFadeWidth, 0.0001), distanceFromPlane);",
         "    float foregroundAlpha = mix(1.0, mprFrontAlpha, frontMask);",
@@ -128,6 +132,7 @@ export class ModelVisibilityShaderController {
           "uniform float mprFrontAlpha;",
           "uniform float mprForegroundDistance;",
           "uniform float mprFadeWidth;",
+          "uniform float mprFixedFrontSide;",
         ].join("\n"))
         .replace("#include <alphahash_fragment>", () => {
           status.fragmentAlpha = true;
@@ -160,6 +165,7 @@ export class ModelVisibilityShaderController {
       shader.uniforms.mprFrontAlpha.value = this.frontAlpha;
       shader.uniforms.mprForegroundDistance.value = this.foregroundDistance;
       shader.uniforms.mprFadeWidth.value = this.fadeWidth;
+      shader.uniforms.mprFixedFrontSide.value = this.fixedFrontSide;
     }
   }
 
@@ -213,6 +219,7 @@ export class ModelVisibilityShaderController {
       transparencyMode: this.enabled ? "alpha-hash" : "opaque",
       foregroundDistance: this.foregroundDistance,
       fadeWidth: this.fadeWidth,
+      fixedFrontSide: this.fixedFrontSide,
       materialCount: this.records.size,
       shaderCount,
       vertexPatched,

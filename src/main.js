@@ -7,7 +7,7 @@ import { ValidationLogger } from "./ValidationLogger.js";
 import { formatVector } from "./math3d.js";
 import { volumeCenter } from "./VolumeGeometry.js";
 import { viewerConfig } from "./config/viewerConfig.js?v=interaction-defaults-1";
-import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=startup-mikan-demo-3";
+import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=locked-foreground-side-1";
 import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController, constrainDicomInputToPlane } from "./three/DynamicMprController.js?v=fixed-mpr-plane-2";
@@ -335,6 +335,7 @@ function toggleObservationLock() {
   const locking = !state.observationLocked;
   if (locking && !els.workspace.classList.contains("controls-collapsed")) toggleControlsPane();
   state.observationLocked = locking;
+  state.threeScene?.setForegroundSideLocked(locking);
   els.workspace.classList.toggle("observation-locked", locking);
   els.fileMenu.classList.toggle("is-locked", locking);
   els.fileMenu.open = false;

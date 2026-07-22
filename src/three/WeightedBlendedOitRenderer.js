@@ -114,6 +114,7 @@ export class WeightedBlendedOitRenderer {
     }
     const material = record[pass];
     material.userData.oitUniforms.frontAlpha.value = options.frontAlpha;
+    material.userData.oitUniforms.fixedFrontSide.value = options.fixedFrontSide ?? 0;
     material.userData.oitUniforms.planeCenter.value.set(...options.planeCenter);
     material.userData.oitUniforms.planeNormal.value.set(...options.planeNormal);
     material.userData.oitUniforms.planeU.value.set(...options.planeU);
@@ -140,6 +141,7 @@ export class WeightedBlendedOitRenderer {
     }
     const uniforms = {
       frontAlpha: { value: 0.5 },
+      fixedFrontSide: { value: 0 },
       planeCenter: { value: new THREE.Vector3() },
       planeNormal: { value: new THREE.Vector3(0, 0, 1) },
       planeU: { value: new THREE.Vector3(1, 0, 0) },
@@ -168,6 +170,7 @@ export class WeightedBlendedOitRenderer {
           "#include <common>",
           "varying vec3 vOitWorldPosition;",
           "uniform float frontAlpha;",
+          "uniform float fixedFrontSide;",
           "uniform vec3 planeCenter;",
           "uniform vec3 planeNormal;",
           "uniform vec3 planeU;",
@@ -198,7 +201,8 @@ export class WeightedBlendedOitRenderer {
       "bool oitInside=oitT>0.0 && abs(dot(oitHit,normalize(planeU)))<=planeHalfSize.x && abs(dot(oitHit,normalize(planeV)))<=planeHalfSize.y;",
       "float oitD=dot(vOitWorldPosition-planeCenter,oitN);",
       "float oitCameraD=dot(cameraPosition-planeCenter,oitN);",
-      "if(!oitInside || oitD*oitCameraD<=0.0) discard;",
+      "float oitFrontSide=abs(fixedFrontSide)>0.5?fixedFrontSide:(oitCameraD<0.0?-1.0:1.0);",
+      "if(!oitInside || oitD*oitFrontSide<=0.0) discard;",
       "float oitAlpha=clamp(frontAlpha*diffuseColor.a,0.0,1.0);",
       "float oitWeight=max(0.01,oitAlpha);",
     ];
