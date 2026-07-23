@@ -563,6 +563,7 @@ export class ThreeSceneManager {
   showValidationAnswer(dicomPoint) {
     this.clearValidationAnswer();
     this.validationAnswerMarker = this.createValidationMarker(dicomPoint, 0x7ee7ef, 1);
+    this.validationGizmo = this.createValidationGizmo(this.validationAnswerMarker.position);
   }
 
   createValidationMarker(dicomPoint, color, scale = 1) {
@@ -604,12 +605,139 @@ export class ThreeSceneManager {
     return marker;
   }
 
+  createValidationGizmo(position) {
+    const THREE = this.THREE;
+    const group = new THREE.Group();
+    const length = this.hasSceneContentBounds ? Math.max(18, this.sceneContentSphere.radius * 0.16) : 40;
+    const shaftRadius = Math.max(1.2, length * 0.035);
+    const coneRadius = shaftRadius * 2.5;
+    const coneLength = length * 0.22;
+    const axes = [
+      { name: "X", vector: new THREE.Vector3(1, 0, 0), color: 0xff5b64, rotate: ["z", -Math.PI / 2] },
+      { name: "Y", vector: new THREE.Vector3(0, 1, 0), color: 0x62f0a7, rotate: null },
+      { name: "Z", vector: new THREE.Vector3(0, 0, 1), color: 0x59a8ff, rotate: ["x", Math.PI / 2] },
+    ];
+    for (const axis of axes) {
+      const material = new THREE.MeshBasicMaterial({
+        color: axis.color,
+        depthTest: false,
+        depthWrite: false,
+        transparent: true,
+        opacity: 0.95,
+      });
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(shaftRadius, shaftRadius, length - coneLength, 12),
+        material
+      );
+      shaft.position.copy(axis.vector).multiplyScalar((length - coneLength) / 2);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(coneRadius, coneLength, 16), material.clone());
+      cone.position.copy(axis.vector).multiplyScalar(length - coneLength / 2);
+      for (const mesh of [shaft, cone]) {
+        if (axis.rotate) mesh.rotation[axis.rotate[0]] = axis.rotate[1];
+        mesh.userData.validationAxis = axis.name;
+        mesh.renderOrder = 1002;
+        group.add(mesh);
+      }
+    }
+    group.position.copy(position);
+    group.userData.axisLength = length;
+    group.name = "validation-translation-gizmo";
+    this.scene.add(group);
+    this.requestRender();
+    return group;
+  }
+
+  beginValidationMarkerDrag(clientX, clientY) {
+    if (!this.validationGizmo || !this.validationAnswerMarker) return false;
+    const raycaster = this.createPointerRaycaster(clientX, clientY);
+    if (!raycaster) return false;
+    const hit = raycaster.intersectObject(this.validationGizmo, true)[0];
+    const axisName = hit?.object?.userData?.validationAxis;
+    if (!axisName) return false;
+    const axis = axisName === "X"
+      ? new this.THREE.Vector3(1, 0, 0)
+      : axisName === "Y"
+        ? new this.THREE.Vector3(0, 1, 0)
+        : new this.THREE.Vector3(0, 0, 1);
+    const originScreen = this.worldToClient(this.validationGizmo.position);
+    const endpointScreen = this.worldToClient(
+      this.validationGizmo.position.clone().addScaledVector(axis, this.validationGizmo.userData.axisLength)
+    );
+    const screenAxis = new this.THREE.Vector2(
+      endpointScreen.x - originScreen.x,
+      endpointScreen.y - originScreen.y
+    );
+    const screenLength = Math.max(1, screenAxis.length());
+    screenAxis.normalize();
+    this.validationMarkerDrag = {
+      axis,
+      screenAxis,
+      worldPerPixel: this.validationGizmo.userData.axisLength / screenLength,
+      startPointer: new this.THREE.Vector2(clientX, clientY),
+      startPosition: this.validationGizmo.position.clone(),
+    };
+    if (this.controls) this.controls.enabled = false;
+    return true;
+  }
+
+  updateValidationMarkerDrag(clientX, clientY) {
+    const drag = this.validationMarkerDrag;
+    if (!drag) return null;
+    const pointerDelta = new this.THREE.Vector2(clientX, clientY).sub(drag.startPointer);
+    const distance = pointerDelta.dot(drag.screenAxis) * drag.worldPerPixel;
+    const position = drag.startPosition.clone().addScaledVector(drag.axis, distance);
+    this.validationGizmo.position.copy(position);
+    this.validationAnswerMarker.position.copy(position);
+    this.requestRender();
+    return position.toArray();
+  }
+
+  endValidationMarkerDrag() {
+    if (!this.validationMarkerDrag) return null;
+    this.validationMarkerDrag = null;
+    if (this.controls) this.controls.enabled = true;
+    this.requestRender();
+    return this.validationAnswerMarker?.position.toArray() ?? null;
+  }
+
+  createPointerRaycaster(clientX, clientY) {
+    if (!this.camera || !this.renderer) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const pointer = new this.THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    const raycaster = new this.THREE.Raycaster();
+    raycaster.setFromCamera(pointer, this.camera);
+    return raycaster;
+  }
+
+  worldToClient(point) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const projected = point.clone().project(this.camera);
+    return {
+      x: rect.left + (projected.x + 1) * rect.width / 2,
+      y: rect.top + (1 - projected.y) * rect.height / 2,
+    };
+  }
+
   clearValidationTarget() {
     this.disposeValidationMarker("validationTargetMarker");
   }
 
   clearValidationAnswer() {
+    this.endValidationMarkerDrag();
     this.disposeValidationMarker("validationAnswerMarker");
+    if (this.validationGizmo) {
+      this.scene.remove(this.validationGizmo);
+      this.validationGizmo.traverse((object) => {
+        object.geometry?.dispose?.();
+        object.material?.dispose?.();
+      });
+      this.validationGizmo = null;
+      this.requestRender();
+    }
   }
 
   clearValidationMarkers() {

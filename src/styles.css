@@ -1168,7 +1168,7 @@ pre {
 }
 
 .mode-entry-button {
-  margin-left: auto;
+  width: 100%;
   min-height: 36px;
   padding: 0 16px;
   border: 1px solid rgb(126 231 239 / 0.35);
@@ -1176,6 +1176,10 @@ pre {
   background: rgb(13 29 37 / 0.85);
   color: #dffcff;
   font-weight: 700;
+}
+
+.validation-settings-entry .control-hint {
+  margin: 0 0 12px;
 }
 
 .validation-shell {
@@ -1202,6 +1206,14 @@ body.validation-active .viewer-quick-actions,
 body.validation-active .mpr-pane,
 body.validation-active .debug-drawer {
   visibility: hidden;
+}
+
+body.validation-active .workspace {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+body.validation-active .controls-pane {
+  display: none;
 }
 
 .validation-header {

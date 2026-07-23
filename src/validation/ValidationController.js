@@ -215,8 +215,35 @@ export class ValidationController {
   attachPicking() {
     const canvas = this.getScene()?.renderer?.domElement;
     if (!canvas || this.pickHandlers) return;
-    const down = (event) => { this.pointerStart = [event.clientX, event.clientY]; };
+    let draggingGizmo = false;
+    const down = (event) => {
+      if (event.button !== 0) return;
+      draggingGizmo = this.getScene().beginValidationMarkerDrag(event.clientX, event.clientY);
+      if (draggingGizmo) {
+        canvas.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+      }
+      this.pointerStart = draggingGizmo ? null : [event.clientX, event.clientY];
+    };
+    const move = (event) => {
+      if (!draggingGizmo) return;
+      this.getScene().updateValidationMarkerDrag(event.clientX, event.clientY);
+      event.preventDefault();
+    };
     const up = (event) => {
+      if (draggingGizmo) {
+        draggingGizmo = false;
+        if (canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+        const point = this.getScene().endValidationMarkerDrag();
+        if (point) {
+          const trial = this.currentTrial();
+          this.answerDicom = this.getMapper().threePointToDicom(point);
+          trial.reposition_count = (trial.reposition_count ?? 0) + 1;
+          this.els.instructionText.textContent = "X・Y・Z軸で調整し、回答を確定してください";
+          this.log("answer_gizmo_moved", { reposition_count: trial.reposition_count });
+        }
+        return;
+      }
       if (!this.pointerStart || Math.hypot(event.clientX - this.pointerStart[0], event.clientY - this.pointerStart[1]) > 5) return;
       const point = this.getScene().pickModelPoint(event.clientX, event.clientY);
       if (!point) {
@@ -229,19 +256,30 @@ export class ValidationController {
       this.answerDicom = this.getMapper().threePointToDicom(point);
       this.getScene().showValidationAnswer(this.answerDicom);
       this.els.confirmAnswer.disabled = false;
-      this.els.instructionText.textContent = "位置を確認し、回答を確定してください";
+      this.els.instructionText.textContent = "X・Y・Z軸で位置を調整できます";
       this.log("answer_placed", { reposition_count: trial.reposition_count ?? 0 });
     };
+    const cancel = (event) => {
+      if (!draggingGizmo) return;
+      draggingGizmo = false;
+      if (canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      this.getScene().endValidationMarkerDrag();
+    };
     canvas.addEventListener("pointerdown", down);
+    canvas.addEventListener("pointermove", move);
     canvas.addEventListener("pointerup", up);
-    this.pickHandlers = { canvas, down, up };
+    canvas.addEventListener("pointercancel", cancel);
+    this.pickHandlers = { canvas, down, move, up, cancel };
   }
 
   detachPicking() {
     if (!this.pickHandlers) return;
-    const { canvas, down, up } = this.pickHandlers;
+    const { canvas, down, move, up, cancel } = this.pickHandlers;
     canvas.removeEventListener("pointerdown", down);
+    canvas.removeEventListener("pointermove", move);
     canvas.removeEventListener("pointerup", up);
+    canvas.removeEventListener("pointercancel", cancel);
+    this.getScene()?.endValidationMarkerDrag();
     this.pickHandlers = null;
   }
 

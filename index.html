@@ -35,7 +35,6 @@
             <h1>ViewSync</h1>
           </div>
         </div>
-        <button id="validationModeBtn" class="mode-entry-button" type="button">検証モード</button>
       </header>
 
       <section class="workspace controls-collapsed">
@@ -73,6 +72,15 @@
         </div>
 
         <aside class="controls-pane">
+          <details class="control-group validation-settings-entry">
+            <summary>検証</summary>
+            <fieldset>
+              <legend>研究用モード</legend>
+              <p class="control-hint">MPR条件と提案ビューア条件の位置対応理解を比較します。</p>
+              <button id="validationModeBtn" class="mode-entry-button" type="button">検証モードを開始</button>
+            </fieldset>
+          </details>
+
           <details class="file-menu settings-file-menu">
             <summary>データ読込</summary>
             <div class="file-actions">
@@ -413,7 +421,7 @@
             <small id="validationTimer">01:00</small>
           </div>
           <div id="validationResponsePanel" class="validation-response-panel" hidden>
-            <p>記憶した位置を可視光モデル表面上でクリック／タップしてください。マーカーは確定前なら再配置できます。</p>
+            <p>まずモデル表面をクリック／タップし、その後は赤・緑・青のX・Y・Z軸ハンドルで3次元位置を調整してください。</p>
             <div class="validation-actions">
               <button id="validationResetAnswerBtn" class="secondary" type="button">マーカーを取消</button>
               <button id="validationConfirmAnswerBtn" type="button" disabled>回答を確定</button>
@@ -451,6 +459,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=validation-phase1-1"></script>
+    <script type="module" src="./src/main.js?v=validation-gizmo-1"></script>
   </body>
 </html>
