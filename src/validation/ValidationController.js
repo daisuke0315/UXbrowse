@@ -22,7 +22,6 @@ export class ValidationController {
     this.restoreViewer = restoreViewer;
     this.session = null;
     this.trialIndex = -1;
-    this.timerId = null;
     this.responseStartedAt = 0;
     this.answerDicom = null;
     this.pointerStart = null;
@@ -74,7 +73,6 @@ export class ValidationController {
   }
 
   close() {
-    this.stopTimer();
     this.detachPicking();
     this.getScene()?.clearValidationMarkers();
     this.restoreViewer();
@@ -118,7 +116,6 @@ export class ValidationController {
         participant_id: participantId,
         session_id: `${participantId}-${Date.now()}`,
         allocation_group: this.els.allocation.value,
-        observation_time_s: Number(config.observation_time_s) || 60,
         started_at: new Date().toISOString(),
         status: "in_progress",
         trials: order.map((condition, index) => ({
@@ -171,7 +168,6 @@ export class ValidationController {
     if (trial.condition === "mpr") this.renderThreePlaneMpr(trial.target_xyz_mm);
     else this.restoreViewer({ validation: true });
     this.log("observation_started", { condition: trial.condition, target_id: trial.target_id });
-    this.startTimer(this.session.observation_time_s);
   }
 
   renderThreePlaneMpr(target) {
@@ -207,26 +203,9 @@ export class ValidationController {
       : `基準から ${offsetMm > 0 ? "+" : ""}${offsetMm} mm`;
   }
 
-  startTimer(seconds) {
-    this.stopTimer();
-    let remaining = seconds;
-    this.els.timer.textContent = formatTime(remaining);
-    this.timerId = window.setInterval(() => {
-      remaining -= 1;
-      this.els.timer.textContent = formatTime(Math.max(0, remaining));
-      if (remaining <= 0) this.beginResponse();
-    }, 1000);
-  }
-
-  stopTimer() {
-    if (this.timerId) window.clearInterval(this.timerId);
-    this.timerId = null;
-  }
-
   beginResponse() {
     const trial = this.currentTrial();
     if (!trial || trial.status !== "observing") return;
-    this.stopTimer();
     trial.observation_ended_at = new Date().toISOString();
     trial.final_camera_pose = this.getScene().getCameraPose();
     trial.status = "responding";
@@ -237,7 +216,6 @@ export class ValidationController {
     this.els.mprGrid.hidden = true;
     this.els.condition.textContent = "回答";
     this.els.instructionText.textContent = "可視光モデル上で位置を指定してください";
-    this.els.timer.textContent = "";
     this.els.endObservation.hidden = true;
     this.els.responsePanel.hidden = false;
     this.initializeAnswerGizmo();
@@ -357,7 +335,6 @@ export class ValidationController {
   }
 
   completeSession() {
-    this.stopTimer();
     this.detachPicking();
     this.getScene().clearValidationMarkers();
     this.getScene().setValidationResponseMode(false);
@@ -545,10 +522,6 @@ function sanitizeId(value) {
 
 function fixed(value) {
   return Number(value).toFixed(3);
-}
-
-function formatTime(seconds) {
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function download(name, content, type) {

@@ -278,7 +278,6 @@ const validationController = new ValidationController({
     cancel: document.querySelector("#validationCancelBtn"),
     condition: document.querySelector("#validationConditionLabel"),
     instructionText: document.querySelector("#validationInstructionText"),
-    timer: document.querySelector("#validationTimer"),
     mprGrid: document.querySelector("#validationMprGrid"),
     sagittal: document.querySelector("#validationSagittal"),
     sagittalOffset: document.querySelector("#validationSagittalOffset"),

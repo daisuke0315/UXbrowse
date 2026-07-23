@@ -1444,12 +1444,6 @@ body.validation-active .controls-pane {
   font-weight: 800;
 }
 
-.validation-instruction small {
-  min-width: 50px;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
 .validation-response-panel {
   position: fixed;
   z-index: 82;

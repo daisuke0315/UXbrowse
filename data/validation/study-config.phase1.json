@@ -1,12 +1,10 @@
 {
   "study_id": "POSITION-UNDERSTANDING-01",
   "config_version": "phase1-demo-1.0.0",
-  "observation_time_s": 60,
-  "show_countdown": true,
   "show_result_to_participant": false,
-  "mpr_controls": ["window", "zoom"],
+  "mpr_controls": ["slice"],
   "proposal_controls": ["rotate", "zoom"],
-  "response_controls": ["rotate", "zoom", "place_marker", "reset", "confirm"],
+  "response_controls": ["rotate", "zoom", "place_marker", "xyz_gizmo", "reset", "confirm"],
   "datasets": {
     "mikan": {
       "targets": [
