@@ -12,6 +12,7 @@ import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController, constrainDicomInputToPlane } from "./three/DynamicMprController.js?v=fixed-mpr-plane-2";
 import { MprUpdateScheduler } from "./three/MprUpdateScheduler.js";
+import { ValidationController } from "./validation/ValidationController.js?v=phase1-1";
 
 const logger = new ValidationLogger();
 const loader = new DicomLoader(logger);
@@ -70,6 +71,7 @@ const state = {
   observationLocked: false,
   startupDemoToken: 0,
   startupDemoLoading: false,
+  activeDemoId: null,
   defaults: {
     eye: [0, 0, -500],
     target: [0, 0, 0],
@@ -165,6 +167,7 @@ const els = {
   debugInfo: document.querySelector("#debugInfo"),
   logOutput: document.querySelector("#logOutput"),
   diagnosticsOutput: document.querySelector("#diagnosticsOutput"),
+  validationModeBtn: document.querySelector("#validationModeBtn"),
 };
 
 createVectorInputs("eye", state.defaults.eye);
@@ -257,6 +260,54 @@ for (const input of document.querySelectorAll("input, select")) {
   });
 }
 
+const validationController = new ValidationController({
+  elements: {
+    entry: els.validationModeBtn,
+    shell: document.querySelector("#validationShell"),
+    title: document.querySelector("#validationTitle"),
+    participantBadge: document.querySelector("#validationParticipantBadge"),
+    stepBadge: document.querySelector("#validationStepBadge"),
+    setup: document.querySelector("#validationSetup"),
+    task: document.querySelector("#validationTask"),
+    complete: document.querySelector("#validationComplete"),
+    form: document.querySelector("#validationSetupForm"),
+    participant: document.querySelector("#validationParticipantId"),
+    dataset: document.querySelector("#validationDataset"),
+    allocation: document.querySelector("#validationAllocation"),
+    status: document.querySelector("#validationSetupStatus"),
+    cancel: document.querySelector("#validationCancelBtn"),
+    condition: document.querySelector("#validationConditionLabel"),
+    instructionText: document.querySelector("#validationInstructionText"),
+    timer: document.querySelector("#validationTimer"),
+    mprGrid: document.querySelector("#validationMprGrid"),
+    sagittal: document.querySelector("#validationSagittal"),
+    coronal: document.querySelector("#validationCoronal"),
+    axial: document.querySelector("#validationAxial"),
+    responsePanel: document.querySelector("#validationResponsePanel"),
+    resetAnswer: document.querySelector("#validationResetAnswerBtn"),
+    confirmAnswer: document.querySelector("#validationConfirmAnswerBtn"),
+    endObservation: document.querySelector("#validationEndObservationBtn"),
+    csv: document.querySelector("#validationCsvBtn"),
+    json: document.querySelector("#validationJsonBtn"),
+    finish: document.querySelector("#validationFinishBtn"),
+  },
+  getVolume: () => state.volume,
+  getScene: () => state.threeScene,
+  getMapper: () => state.mapper,
+  getBaseMprRequest,
+  renderMpr: (volume, request) => renderer.render(volume, request),
+  loadDataset: async (datasetId) => {
+    if (state.activeDemoId === datasetId && state.volume && state.threeScene?.getObjSummary?.()) return;
+    const demo = DEMO_DATASETS[datasetId];
+    if (!demo) throw new Error(`不明なデータセットです: ${datasetId}`);
+    await loadBundledDemo(demo);
+  },
+  restoreViewer: () => {
+    state.threeScene?.setValidationResponseMode(false);
+    applyMprPlaneOverlayControls();
+  },
+});
+
 initThree();
 updateAxisFlipButtons();
 updateMprUvFlipButtons();
@@ -284,6 +335,7 @@ function loadDemoFromToolbar(demo) {
 }
 
 function setActiveDemoButton(demoId) {
+  state.activeDemoId = demoId;
   for (const [id, button] of [["mikan", els.mikanDemoBtn], ["banana", els.bananaDemoBtn]]) {
     button.classList.toggle("is-active", id === demoId);
     button.setAttribute("aria-pressed", String(id === demoId));

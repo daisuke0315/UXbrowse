@@ -540,6 +540,113 @@ export class ThreeSceneManager {
     this.logger.info(`${sourceFormat}モデルを消去しました`);
   }
 
+  pickModelPoint(clientX, clientY) {
+    if (!this.objModel || !this.camera || !this.renderer) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const pointer = new this.THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    this.scene.updateMatrixWorld(true);
+    const raycaster = new this.THREE.Raycaster();
+    raycaster.setFromCamera(pointer, this.camera);
+    const hit = raycaster.intersectObject(this.objModel, true)[0];
+    return hit ? hit.point.toArray() : null;
+  }
+
+  showValidationTarget(dicomPoint) {
+    this.clearValidationTarget();
+    this.validationTargetMarker = this.createValidationMarker(dicomPoint, 0x62f0a7, 1.2);
+  }
+
+  showValidationAnswer(dicomPoint) {
+    this.clearValidationAnswer();
+    this.validationAnswerMarker = this.createValidationMarker(dicomPoint, 0x7ee7ef, 1);
+  }
+
+  createValidationMarker(dicomPoint, color, scale = 1) {
+    if (!this.mapper || !this.scene) return null;
+    const point = this.mapper.dicomPointToThree(dicomPoint);
+    const markerCanvas = document.createElement("canvas");
+    markerCanvas.width = 128;
+    markerCanvas.height = 128;
+    const context = markerCanvas.getContext("2d");
+    const cssColor = `#${color.toString(16).padStart(6, "0")}`;
+    context.strokeStyle = cssColor;
+    context.fillStyle = "rgba(4, 12, 16, 0.7)";
+    context.lineWidth = 8;
+    context.beginPath();
+    context.arc(64, 64, 30, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+    context.beginPath();
+    context.moveTo(12, 64);
+    context.lineTo(116, 64);
+    context.moveTo(64, 12);
+    context.lineTo(64, 116);
+    context.stroke();
+    const texture = new this.THREE.CanvasTexture(markerCanvas);
+    const marker = new this.THREE.Sprite(new this.THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    }));
+    const markerSize = (this.hasSceneContentBounds ? Math.max(10, this.sceneContentSphere.radius * 0.1) : 24) * scale;
+    marker.scale.set(markerSize, markerSize, 1);
+    marker.position.set(...point);
+    marker.renderOrder = 1000;
+    marker.name = "validation-marker";
+    this.scene.add(marker);
+    this.requestRender();
+    return marker;
+  }
+
+  clearValidationTarget() {
+    this.disposeValidationMarker("validationTargetMarker");
+  }
+
+  clearValidationAnswer() {
+    this.disposeValidationMarker("validationAnswerMarker");
+  }
+
+  clearValidationMarkers() {
+    this.clearValidationTarget();
+    this.clearValidationAnswer();
+  }
+
+  disposeValidationMarker(property) {
+    const marker = this[property];
+    if (!marker) return;
+    this.scene.remove(marker);
+    marker.geometry?.dispose?.();
+    marker.material.map?.dispose?.();
+    marker.material.dispose();
+    this[property] = null;
+    this.requestRender();
+  }
+
+  setValidationResponseMode(enabled) {
+    if (enabled) {
+      this.mprPlaneOverlay?.setOptions({ visible: false });
+      this.foregroundOptions.enabled = false;
+      this.modelVisibility?.setOptions(this.foregroundOptions);
+    }
+    this.requestRender();
+  }
+
+  getCameraPose() {
+    if (!this.camera) return null;
+    return {
+      position: this.camera.position.toArray(),
+      target: this.controls?.target?.toArray?.() ?? null,
+      up: this.camera.up.toArray(),
+      zoom: this.camera.zoom,
+    };
+  }
+
   updateMprPlaneOverlay(canvas, result, request, options = {}) {
     if (!this.initialized || !this.mapper) return null;
     const planeInfo = this.mprPlaneOverlay.update({

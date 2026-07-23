@@ -35,6 +35,7 @@
             <h1>ViewSync</h1>
           </div>
         </div>
+        <button id="validationModeBtn" class="mode-entry-button" type="button">検証モード</button>
       </header>
 
       <section class="workspace controls-collapsed">
@@ -358,6 +359,81 @@
         </aside>
       </section>
 
+      <section id="validationShell" class="validation-shell" hidden aria-label="検証モード">
+        <header class="validation-header">
+          <div>
+            <span class="validation-kicker">VALIDATION MODE · PHASE 1</span>
+            <strong id="validationTitle">検証モード設定</strong>
+          </div>
+          <div class="validation-progress">
+            <span id="validationParticipantBadge">未開始</span>
+            <span id="validationStepBadge">SETUP</span>
+          </div>
+        </header>
+
+        <section id="validationSetup" class="validation-card validation-setup">
+          <div>
+            <span class="validation-section-number">01</span>
+            <h2>MPRと提案ビューアの比較検証</h2>
+            <p>氏名は入力せず、研究用IDのみを使用します。2条件の観察後、可視光モデル上で記憶した位置を回答します。</p>
+          </div>
+          <form id="validationSetupForm" class="validation-form">
+            <label>研究用ID
+              <input id="validationParticipantId" type="text" required maxlength="64" autocomplete="off" placeholder="例：P001">
+            </label>
+            <label>データセット
+              <select id="validationDataset">
+                <option value="mikan">みかん</option>
+                <option value="banana">バナナ</option>
+              </select>
+            </label>
+            <label>条件順
+              <select id="validationAllocation">
+                <option value="A">A群：MPR → 提案ビューア</option>
+                <option value="B">B群：提案ビューア → MPR</option>
+              </select>
+            </label>
+            <p id="validationSetupStatus" class="validation-note">開始時にデータと座標系を確認します。</p>
+            <div class="validation-actions">
+              <button id="validationCancelBtn" class="secondary" type="button">通常モードへ戻る</button>
+              <button type="submit">検証を開始</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="validationTask" class="validation-task" hidden>
+          <div id="validationMprGrid" class="validation-mpr-grid" hidden>
+            <figure><figcaption>SAGITTAL</figcaption><canvas id="validationSagittal" width="384" height="384"></canvas></figure>
+            <figure><figcaption>CORONAL</figcaption><canvas id="validationCoronal" width="384" height="384"></canvas></figure>
+            <figure><figcaption>AXIAL</figcaption><canvas id="validationAxial" width="384" height="384"></canvas></figure>
+          </div>
+          <div id="validationInstruction" class="validation-instruction">
+            <span id="validationConditionLabel">観察</span>
+            <strong id="validationInstructionText">ターゲット位置を観察してください</strong>
+            <small id="validationTimer">01:00</small>
+          </div>
+          <div id="validationResponsePanel" class="validation-response-panel" hidden>
+            <p>記憶した位置を可視光モデル表面上でクリック／タップしてください。マーカーは確定前なら再配置できます。</p>
+            <div class="validation-actions">
+              <button id="validationResetAnswerBtn" class="secondary" type="button">マーカーを取消</button>
+              <button id="validationConfirmAnswerBtn" type="button" disabled>回答を確定</button>
+            </div>
+          </div>
+          <button id="validationEndObservationBtn" class="validation-skip-button" type="button">観察を終了して回答へ</button>
+        </section>
+
+        <section id="validationComplete" class="validation-card validation-complete" hidden>
+          <span class="validation-section-number">DONE</span>
+          <h2>検証が完了しました</h2>
+          <p>結果は参加者画面には表示されません。研究担当者がCSVまたはJSONとして保存してください。</p>
+          <div class="validation-actions">
+            <button id="validationCsvBtn" type="button">CSVを保存</button>
+            <button id="validationJsonBtn" class="secondary" type="button">JSONを保存</button>
+            <button id="validationFinishBtn" class="secondary" type="button">通常モードへ戻る</button>
+          </div>
+        </section>
+      </section>
+
       <details class="debug-drawer">
         <summary>デバッグ・ログ</summary>
         <section class="debug-metadata" aria-label="シリーズ情報">
@@ -375,6 +451,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=locked-foreground-side-1"></script>
+    <script type="module" src="./src/main.js?v=validation-phase1-1"></script>
   </body>
 </html>

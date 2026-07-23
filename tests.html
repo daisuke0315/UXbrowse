@@ -20,6 +20,7 @@
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
       import { ThreeSceneManager, calculateRequiredCameraFar, calculateRequiredCameraNear, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=double-sided-depth";
       import { dot, length } from "./src/math3d.js";
+      import { calculateValidationError } from "./src/validation/ValidationController.js?v=phase1-1";
 
       const lines = [];
       function assert(name, condition, details = "") {
@@ -128,6 +129,9 @@
       });
       assert("UT-127 photogrammetry material is double-sided", fakeMesh.material.side === 2);
       assert("UT-128 opaque model keeps depth", fakeMesh.material.transparent === false && fakeMesh.material.depthTest === true && fakeMesh.material.depthWrite === true);
+      const validationError = calculateValidationError([13, 24, 39], [10, 20, 30]);
+      assert("UT-301 validation signed delta", validationError.delta.every((value, index) => close(value, [3, 4, 9][index])));
+      assert("UT-302 validation 3D error", close(validationError.error3d, Math.sqrt(106)));
 
       const mhaLoader = new MhaLoader();
       const shortMha = createMhaBuffer({
