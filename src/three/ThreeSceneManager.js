@@ -17,6 +17,7 @@ export class ThreeSceneManager {
     this.inertiaFramesRemaining = 0;
     this.currentPixelRatio = 1;
     this.foregroundSideSign = 0;
+    this.validationResponseMode = false;
     this.foregroundOptions = {
       enabled: false,
       frontAlpha: 0.15,
@@ -563,7 +564,17 @@ export class ThreeSceneManager {
   showValidationAnswer(dicomPoint) {
     this.clearValidationAnswer();
     this.validationAnswerMarker = this.createValidationMarker(dicomPoint, 0x7ee7ef, 1);
-    this.validationGizmo = this.createValidationGizmo(this.validationAnswerMarker.position);
+    if (this.validationAnswerMarker) {
+      this.validationGizmo = this.createValidationGizmo(this.validationAnswerMarker.position);
+    }
+  }
+
+  getValidationInitialAnswerPoint() {
+    if (!this.objModel || !this.THREE) return null;
+    this.scene.updateMatrixWorld(true);
+    const bounds = new this.THREE.Box3().setFromObject(this.objModel);
+    if (bounds.isEmpty()) return this.hasSceneContentBounds ? this.sceneContentSphere.center.toArray() : null;
+    return bounds.getCenter(new this.THREE.Vector3()).toArray();
   }
 
   createValidationMarker(dicomPoint, color, scale = 1) {
@@ -608,8 +619,8 @@ export class ThreeSceneManager {
   createValidationGizmo(position) {
     const THREE = this.THREE;
     const group = new THREE.Group();
-    const length = this.hasSceneContentBounds ? Math.max(18, this.sceneContentSphere.radius * 0.16) : 40;
-    const shaftRadius = Math.max(1.2, length * 0.035);
+    const length = this.hasSceneContentBounds ? Math.max(24, this.sceneContentSphere.radius * 0.2) : 44;
+    const shaftRadius = Math.max(1.4, length * 0.04);
     const coneRadius = shaftRadius * 2.5;
     const coneLength = length * 0.22;
     const axes = [
@@ -623,7 +634,8 @@ export class ThreeSceneManager {
         depthTest: false,
         depthWrite: false,
         transparent: true,
-        opacity: 0.95,
+        opacity: 0.78,
+        toneMapped: false,
       });
       const shaft = new THREE.Mesh(
         new THREE.CylinderGeometry(shaftRadius, shaftRadius, length - coneLength, 12),
@@ -638,6 +650,9 @@ export class ThreeSceneManager {
         mesh.renderOrder = 1002;
         group.add(mesh);
       }
+      const label = this.createValidationAxisLabel(axis.name, axis.color, length * 0.22);
+      label.position.copy(axis.vector).multiplyScalar(length * 1.12);
+      group.add(label);
     }
     group.position.copy(position);
     group.userData.axisLength = length;
@@ -647,11 +662,45 @@ export class ThreeSceneManager {
     return group;
   }
 
+  createValidationAxisLabel(text, color, size) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 96;
+    canvas.height = 96;
+    const context = canvas.getContext("2d");
+    const cssColor = `#${color.toString(16).padStart(6, "0")}`;
+    context.fillStyle = "rgba(5, 14, 19, 0.72)";
+    context.strokeStyle = cssColor;
+    context.lineWidth = 6;
+    context.beginPath();
+    context.arc(48, 48, 34, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+    context.fillStyle = cssColor;
+    context.font = "700 48px system-ui, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(text, 48, 50);
+    const texture = new this.THREE.CanvasTexture(canvas);
+    const label = new this.THREE.Sprite(new this.THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.92,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+    }));
+    label.scale.set(size, size, 1);
+    label.renderOrder = 1003;
+    label.name = `validation-axis-${text}`;
+    return label;
+  }
+
   beginValidationMarkerDrag(clientX, clientY) {
     if (!this.validationGizmo || !this.validationAnswerMarker) return false;
     const raycaster = this.createPointerRaycaster(clientX, clientY);
     if (!raycaster) return false;
-    const hit = raycaster.intersectObject(this.validationGizmo, true)[0];
+    const hit = raycaster.intersectObject(this.validationGizmo, true)
+      .find((candidate) => candidate.object?.userData?.validationAxis);
     const axisName = hit?.object?.userData?.validationAxis;
     if (!axisName) return false;
     const axis = axisName === "X"
@@ -733,6 +782,7 @@ export class ThreeSceneManager {
       this.scene.remove(this.validationGizmo);
       this.validationGizmo.traverse((object) => {
         object.geometry?.dispose?.();
+        object.material?.map?.dispose?.();
         object.material?.dispose?.();
       });
       this.validationGizmo = null;
@@ -757,6 +807,7 @@ export class ThreeSceneManager {
   }
 
   setValidationResponseMode(enabled) {
+    this.validationResponseMode = Boolean(enabled);
     if (enabled) {
       this.mprPlaneOverlay?.setOptions({ visible: false });
       this.foregroundOptions.enabled = false;
@@ -777,6 +828,13 @@ export class ThreeSceneManager {
 
   updateMprPlaneOverlay(canvas, result, request, options = {}) {
     if (!this.initialized || !this.mapper) return null;
+    if (this.validationResponseMode) {
+      this.mprPlaneOverlay?.setOptions({ visible: false });
+      this.foregroundOptions.enabled = false;
+      this.modelVisibility?.setOptions(this.foregroundOptions);
+      this.requestRender();
+      return this.mprPlaneOverlay?.getPlaneInfo?.() ?? null;
+    }
     const planeInfo = this.mprPlaneOverlay.update({
       canvas,
       result,
@@ -809,6 +867,13 @@ export class ThreeSceneManager {
   }
 
   updateOverlayOptions(options = {}) {
+    if (this.validationResponseMode) {
+      this.mprPlaneOverlay?.setOptions({ ...options, visible: false });
+      this.foregroundOptions.enabled = false;
+      this.modelVisibility?.setOptions(this.foregroundOptions);
+      this.requestRender();
+      return this.mprPlaneOverlay?.getPlaneInfo?.() ?? null;
+    }
     this.mprPlaneOverlay?.setOptions(options);
     this.updateForegroundTransparency(options);
     this.requestRender();

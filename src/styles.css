@@ -1361,13 +1361,13 @@ body.validation-active .controls-pane {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   height: calc(100vh - 68px);
-  padding: 20px;
+  padding: 20px 20px 76px;
   background: #070d11;
 }
 
 .validation-mpr-grid figure {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   margin: 0;
   border: 1px solid rgb(126 231 239 / 0.22);
@@ -1377,6 +1377,10 @@ body.validation-active .controls-pane {
 }
 
 .validation-mpr-grid figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 10px 12px;
   color: #7ee7ef;
   font-size: 11px;
@@ -1384,10 +1388,38 @@ body.validation-active .controls-pane {
   letter-spacing: 0.14em;
 }
 
+.validation-mpr-grid figcaption output {
+  color: #c7dce1;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
 .validation-mpr-grid canvas {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.validation-slice-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 14px;
+  border-top: 1px solid rgb(126 231 239 / 0.12);
+  color: #a9c1ca;
+  font-size: 11px;
+}
+
+.validation-slice-control input {
+  width: 100%;
+  accent-color: #7ee7ef;
+}
+
+.validation-shell.is-response-stage .validation-mpr-grid {
+  display: none !important;
 }
 
 .validation-instruction {

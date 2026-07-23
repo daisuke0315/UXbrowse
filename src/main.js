@@ -7,12 +7,12 @@ import { ValidationLogger } from "./ValidationLogger.js";
 import { formatVector } from "./math3d.js";
 import { volumeCenter } from "./VolumeGeometry.js";
 import { viewerConfig } from "./config/viewerConfig.js?v=interaction-defaults-1";
-import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=validation-gizmo-1";
+import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=validation-gizmo-2";
 import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController, constrainDicomInputToPlane } from "./three/DynamicMprController.js?v=fixed-mpr-plane-2";
 import { MprUpdateScheduler } from "./three/MprUpdateScheduler.js";
-import { ValidationController } from "./validation/ValidationController.js?v=gizmo-1";
+import { ValidationController } from "./validation/ValidationController.js?v=gizmo-2";
 
 const logger = new ValidationLogger();
 const loader = new DicomLoader(logger);
@@ -281,8 +281,14 @@ const validationController = new ValidationController({
     timer: document.querySelector("#validationTimer"),
     mprGrid: document.querySelector("#validationMprGrid"),
     sagittal: document.querySelector("#validationSagittal"),
+    sagittalOffset: document.querySelector("#validationSagittalOffset"),
+    sagittalOffsetValue: document.querySelector("#validationSagittalOffsetValue"),
     coronal: document.querySelector("#validationCoronal"),
+    coronalOffset: document.querySelector("#validationCoronalOffset"),
+    coronalOffsetValue: document.querySelector("#validationCoronalOffsetValue"),
     axial: document.querySelector("#validationAxial"),
+    axialOffset: document.querySelector("#validationAxialOffset"),
+    axialOffsetValue: document.querySelector("#validationAxialOffsetValue"),
     responsePanel: document.querySelector("#validationResponsePanel"),
     resetAnswer: document.querySelector("#validationResetAnswerBtn"),
     confirmAnswer: document.querySelector("#validationConfirmAnswerBtn"),

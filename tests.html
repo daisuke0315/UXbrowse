@@ -20,7 +20,7 @@
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
       import { ThreeSceneManager, calculateRequiredCameraFar, calculateRequiredCameraNear, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=double-sided-depth";
       import { dot, length } from "./src/math3d.js";
-      import { calculateValidationError } from "./src/validation/ValidationController.js?v=gizmo-1";
+      import { calculateSliceOffsetRange, calculateValidationError } from "./src/validation/ValidationController.js?v=gizmo-2";
 
       const lines = [];
       function assert(name, condition, details = "") {
@@ -52,6 +52,8 @@
       assert("UT-003 worldToVoxel", close(voxel[0], 2) && close(voxel[1], 3) && close(voxel[2], 2));
       assert("UT-003 volume center", volumeCenter(metadata).every((v, i) => close(v, [13, 24.5, 36][i])));
       assert("UT-003 voxel center span", volumeVoxelCenterSpan(metadata).every((v, i) => close(v, [6, 9, 12][i])));
+      const sliceRange = calculateSliceOffsetRange(metadata, [14, 26, 38], [1, 0, 0]);
+      assert("UT-303 validation slice range", close(sliceRange.min, -4) && close(sliceRange.max, 2));
 
       const data = new Int16Array(8);
       for (let i = 0; i < data.length; i += 1) data[i] = i;

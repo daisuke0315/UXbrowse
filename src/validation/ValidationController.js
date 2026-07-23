@@ -26,6 +26,12 @@ export class ValidationController {
     this.responseStartedAt = 0;
     this.answerDicom = null;
     this.pointerStart = null;
+    this.mprTarget = null;
+    this.mprDefinitions = [
+      { normal: [1, 0, 0], up: [0, 0, -1], canvas: elements.sagittal, slider: elements.sagittalOffset, output: elements.sagittalOffsetValue },
+      { normal: [0, 1, 0], up: [0, 0, -1], canvas: elements.coronal, slider: elements.coronalOffset, output: elements.coronalOffsetValue },
+      { normal: [0, 0, 1], up: [0, 1, 0], canvas: elements.axial, slider: elements.axialOffset, output: elements.axialOffsetValue },
+    ];
     this.installEvents();
   }
 
@@ -42,12 +48,27 @@ export class ValidationController {
     this.els.confirmAnswer.addEventListener("click", () => this.confirmAnswer());
     this.els.csv.addEventListener("click", () => this.downloadCsv());
     this.els.json.addEventListener("click", () => this.downloadJson());
+    for (const definition of this.mprDefinitions) {
+      definition.slider.addEventListener("input", () => this.renderMprPlane(definition));
+      definition.canvas.addEventListener("wheel", (event) => {
+        if (this.els.mprGrid.hidden) return;
+        event.preventDefault();
+        const direction = event.deltaY > 0 ? 1 : -1;
+        const next = Math.max(
+          Number(definition.slider.min),
+          Math.min(Number(definition.slider.max), Number(definition.slider.value) + direction)
+        );
+        definition.slider.value = String(next);
+        this.renderMprPlane(definition);
+      }, { passive: false });
+    }
   }
 
   open() {
     document.body.classList.add("validation-active");
     this.els.shell.hidden = false;
     this.els.shell.classList.remove("is-viewer-stage");
+    this.els.shell.classList.remove("is-response-stage");
     this.showOnly("setup");
     this.els.participant.focus();
   }
@@ -60,6 +81,7 @@ export class ValidationController {
     document.body.classList.remove("validation-active");
     this.els.shell.hidden = true;
     this.els.shell.classList.remove("is-viewer-stage");
+    this.els.shell.classList.remove("is-response-stage");
   }
 
   async start() {
@@ -134,6 +156,7 @@ export class ValidationController {
     trial.observation_started_at = new Date().toISOString();
     trial.operation_count = 0;
     this.answerDicom = null;
+    this.getScene().setValidationResponseMode(false);
     this.getScene().clearValidationMarkers();
     this.getScene().showValidationTarget(trial.target_xyz_mm);
     this.showOnly("task");
@@ -142,6 +165,7 @@ export class ValidationController {
     this.els.instructionText.textContent = "表示されたターゲット位置を観察してください";
     this.els.responsePanel.hidden = true;
     this.els.endObservation.hidden = false;
+    this.els.shell.classList.remove("is-response-stage");
     this.els.shell.classList.toggle("is-viewer-stage", trial.condition === "proposal");
     this.els.mprGrid.hidden = trial.condition !== "mpr";
     if (trial.condition === "mpr") this.renderThreePlaneMpr(trial.target_xyz_mm);
@@ -152,25 +176,35 @@ export class ValidationController {
 
   renderThreePlaneMpr(target) {
     const volume = this.getVolume();
-    const base = this.getBaseMprRequest();
-    const definitions = [
-      ["sagittal", [1, 0, 0], [0, 0, -1], this.els.sagittal],
-      ["coronal", [0, 1, 0], [0, 0, -1], this.els.coronal],
-      ["axial", [0, 0, 1], [0, 1, 0], this.els.axial],
-    ];
-    for (const [, normal, up, canvas] of definitions) {
-      const request = {
-        ...base,
-        width: 384,
-        height: 384,
-        target: [...target],
-        eye: target.map((value, index) => value - normal[index] * 500),
-        up,
-        normalOffset: 0,
-      };
-      const result = this.renderMpr(volume, request);
-      drawMprWithTarget(canvas, result);
+    this.mprTarget = [...target];
+    for (const definition of this.mprDefinitions) {
+      const range = calculateSliceOffsetRange(volume.metadata, target, definition.normal);
+      definition.slider.min = String(Math.ceil(range.min));
+      definition.slider.max = String(Math.floor(range.max));
+      definition.slider.value = "0";
+      this.renderMprPlane(definition);
     }
+  }
+
+  renderMprPlane(definition) {
+    const volume = this.getVolume();
+    if (!volume || !this.mprTarget) return;
+    const offsetMm = Number(definition.slider.value) || 0;
+    const planeTarget = this.mprTarget.map((value, index) => value + definition.normal[index] * offsetMm);
+    const request = {
+      ...this.getBaseMprRequest(),
+      width: 384,
+      height: 384,
+      target: planeTarget,
+      eye: planeTarget.map((value, index) => value - definition.normal[index] * 500),
+      up: definition.up,
+      normalOffset: 0,
+    };
+    const result = this.renderMpr(volume, request);
+    drawMprWithTarget(definition.canvas, result, offsetMm);
+    definition.output.textContent = offsetMm === 0
+      ? "基準断面"
+      : `基準から ${offsetMm > 0 ? "+" : ""}${offsetMm} mm`;
   }
 
   startTimer(seconds) {
@@ -199,13 +233,14 @@ export class ValidationController {
     this.getScene().clearValidationMarkers();
     this.getScene().setValidationResponseMode(true);
     this.els.shell.classList.add("is-viewer-stage");
+    this.els.shell.classList.add("is-response-stage");
     this.els.mprGrid.hidden = true;
     this.els.condition.textContent = "回答";
     this.els.instructionText.textContent = "可視光モデル上で位置を指定してください";
     this.els.timer.textContent = "";
     this.els.endObservation.hidden = true;
     this.els.responsePanel.hidden = false;
-    this.els.confirmAnswer.disabled = true;
+    this.initializeAnswerGizmo();
     this.responseStartedAt = performance.now();
     this.attachPicking();
     this.log("response_started", { trial_id: trial.trial_id });
@@ -284,11 +319,23 @@ export class ValidationController {
   }
 
   resetAnswer() {
-    this.answerDicom = null;
-    this.getScene().clearValidationAnswer();
-    this.els.confirmAnswer.disabled = true;
-    this.els.instructionText.textContent = "可視光モデル上で位置を指定してください";
+    this.initializeAnswerGizmo();
+    this.els.instructionText.textContent = "初期位置に戻しました。X・Y・Z軸で調整してください";
     this.log("answer_reset", {});
+  }
+
+  initializeAnswerGizmo() {
+    const point = this.getScene()?.getValidationInitialAnswerPoint?.();
+    if (!point || !this.getMapper()) {
+      this.answerDicom = null;
+      this.getScene()?.clearValidationAnswer();
+      this.els.confirmAnswer.disabled = true;
+      return;
+    }
+    this.answerDicom = this.getMapper().threePointToDicom(point);
+    this.getScene().showValidationAnswer(this.answerDicom);
+    this.els.confirmAnswer.disabled = false;
+    this.els.instructionText.textContent = "中央のXYZギズモを動かすか、モデル表面をクリックしてください";
   }
 
   confirmAnswer() {
@@ -319,6 +366,7 @@ export class ValidationController {
     this.log("session_completed", {});
     this.persist();
     this.els.shell.classList.remove("is-viewer-stage");
+    this.els.shell.classList.remove("is-response-stage");
     this.els.title.textContent = "検証完了";
     this.showOnly("complete");
     this.els.stepBadge.textContent = "COMPLETED";
@@ -386,15 +434,17 @@ function voxelToDicom(metadata, voxel) {
   ];
 }
 
-function drawMprWithTarget(canvas, result) {
+function drawMprWithTarget(canvas, result, offsetMm = 0) {
   canvas.width = result.width;
   canvas.height = result.height;
   const context = canvas.getContext("2d");
   context.putImageData(new ImageData(result.rgba, result.width, result.height), 0, 0);
   const x = result.width / 2;
   const y = result.height / 2;
-  context.strokeStyle = "#62f0a7";
+  const alpha = Math.max(0.22, 1 - Math.abs(offsetMm) / 12);
+  context.strokeStyle = `rgb(98 240 167 / ${alpha})`;
   context.lineWidth = 2;
+  context.setLineDash(Math.abs(offsetMm) > 0.5 ? [6, 5] : []);
   context.beginPath();
   context.moveTo(x - 14, y);
   context.lineTo(x + 14, y);
@@ -404,6 +454,45 @@ function drawMprWithTarget(canvas, result) {
   context.beginPath();
   context.arc(x, y, 7, 0, Math.PI * 2);
   context.stroke();
+  context.setLineDash([]);
+}
+
+export function calculateSliceOffsetRange(metadata, target, normal) {
+  if (!metadata?.dimensions || !metadata?.spacing || !metadata?.origin || !metadata?.direction) {
+    return { min: -100, max: 100 };
+  }
+  const relative = target.map((value, index) => value - metadata.origin[index]);
+  const voxel = [0, 1, 2].map((axis) => {
+    const direction = [
+      metadata.direction[axis],
+      metadata.direction[3 + axis],
+      metadata.direction[6 + axis],
+    ];
+    return dot3(relative, direction) / metadata.spacing[axis];
+  });
+  const rate = [0, 1, 2].map((axis) => {
+    const direction = [
+      metadata.direction[axis],
+      metadata.direction[3 + axis],
+      metadata.direction[6 + axis],
+    ];
+    return dot3(normal, direction) / metadata.spacing[axis];
+  });
+  let min = -Infinity;
+  let max = Infinity;
+  for (let axis = 0; axis < 3; axis += 1) {
+    if (Math.abs(rate[axis]) < 1e-9) continue;
+    const first = (0 - voxel[axis]) / rate[axis];
+    const last = (metadata.dimensions[axis] - 1 - voxel[axis]) / rate[axis];
+    min = Math.max(min, Math.min(first, last));
+    max = Math.min(max, Math.max(first, last));
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return { min: -100, max: 100 };
+  return { min, max };
+}
+
+function dot3(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
 function trialToFlatRecord(session, trial) {

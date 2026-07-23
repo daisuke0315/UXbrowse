@@ -411,9 +411,27 @@
 
         <section id="validationTask" class="validation-task" hidden>
           <div id="validationMprGrid" class="validation-mpr-grid" hidden>
-            <figure><figcaption>SAGITTAL</figcaption><canvas id="validationSagittal" width="384" height="384"></canvas></figure>
-            <figure><figcaption>CORONAL</figcaption><canvas id="validationCoronal" width="384" height="384"></canvas></figure>
-            <figure><figcaption>AXIAL</figcaption><canvas id="validationAxial" width="384" height="384"></canvas></figure>
+            <figure>
+              <figcaption><span>SAGITTAL</span><output id="validationSagittalOffsetValue">基準断面</output></figcaption>
+              <canvas id="validationSagittal" width="384" height="384"></canvas>
+              <label class="validation-slice-control">断面位置
+                <input id="validationSagittalOffset" type="range" min="-100" max="100" step="1" value="0">
+              </label>
+            </figure>
+            <figure>
+              <figcaption><span>CORONAL</span><output id="validationCoronalOffsetValue">基準断面</output></figcaption>
+              <canvas id="validationCoronal" width="384" height="384"></canvas>
+              <label class="validation-slice-control">断面位置
+                <input id="validationCoronalOffset" type="range" min="-100" max="100" step="1" value="0">
+              </label>
+            </figure>
+            <figure>
+              <figcaption><span>AXIAL</span><output id="validationAxialOffsetValue">基準断面</output></figcaption>
+              <canvas id="validationAxial" width="384" height="384"></canvas>
+              <label class="validation-slice-control">断面位置
+                <input id="validationAxialOffset" type="range" min="-100" max="100" step="1" value="0">
+              </label>
+            </figure>
           </div>
           <div id="validationInstruction" class="validation-instruction">
             <span id="validationConditionLabel">観察</span>
@@ -421,9 +439,9 @@
             <small id="validationTimer">01:00</small>
           </div>
           <div id="validationResponsePanel" class="validation-response-panel" hidden>
-            <p>まずモデル表面をクリック／タップし、その後は赤・緑・青のX・Y・Z軸ハンドルで3次元位置を調整してください。</p>
+            <p>中央に表示された赤・緑・青のX・Y・Z軸ハンドルで3次元位置を調整します。モデル表面のクリック／タップでも移動できます。</p>
             <div class="validation-actions">
-              <button id="validationResetAnswerBtn" class="secondary" type="button">マーカーを取消</button>
+              <button id="validationResetAnswerBtn" class="secondary" type="button">初期位置に戻す</button>
               <button id="validationConfirmAnswerBtn" type="button" disabled>回答を確定</button>
             </div>
           </div>
@@ -459,6 +477,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=validation-gizmo-1"></script>
+    <script type="module" src="./src/main.js?v=validation-gizmo-2"></script>
   </body>
 </html>
