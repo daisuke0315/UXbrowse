@@ -499,7 +499,20 @@
         <section id="validationComplete" class="validation-card validation-complete" hidden>
           <span class="validation-section-number">DONE</span>
           <h2 id="validationCompleteTitle">検証が完了しました</h2>
-          <p id="validationCompleteText">結果は参加者画面には表示されません。研究担当者がCSVまたはJSONとして保存してください。</p>
+          <p id="validationCompleteText">結果を確認し、必要に応じてCSVまたはJSONとして保存してください。</p>
+          <section class="validation-result-review" aria-labelledby="validationResultHeading">
+            <div class="validation-result-summary">
+              <div>
+                <span class="validation-section-number">RESULT</span>
+                <h3 id="validationResultHeading">結果確認</h3>
+              </div>
+              <div class="validation-average-error">
+                <span>平均3D誤差</span>
+                <strong id="validationAverageError">-</strong>
+              </div>
+            </div>
+            <div id="validationResultList" class="validation-result-list"></div>
+          </section>
           <div class="validation-actions">
             <button id="validationCsvBtn" type="button">CSVを保存</button>
             <button id="validationJsonBtn" class="secondary" type="button">JSONを保存</button>
@@ -525,6 +538,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=validation-target-overlay-1"></script>
+    <script type="module" src="./src/main.js?v=validation-result-review-1"></script>
   </body>
 </html>

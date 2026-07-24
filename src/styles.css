@@ -1501,7 +1501,127 @@ body.validation-active .controls-pane {
 }
 
 .validation-complete {
+  margin-block: 24px;
   text-align: center;
+}
+
+.validation-result-review {
+  margin: 24px 0;
+  padding: 18px;
+  border: 1px solid rgb(126 231 239 / 0.18);
+  border-radius: 18px;
+  background: rgb(4 13 18 / 0.5);
+  text-align: left;
+}
+
+.validation-result-summary,
+.validation-result-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.validation-result-summary h3 {
+  margin: 4px 0 0;
+  font-size: 20px;
+}
+
+.validation-average-error {
+  display: grid;
+  gap: 3px;
+  min-width: 140px;
+  padding: 10px 14px;
+  border: 1px solid rgb(126 231 239 / 0.2);
+  border-radius: 12px;
+  text-align: right;
+}
+
+.validation-average-error span,
+.validation-result-error span {
+  color: #9eb7bf;
+  font-size: 11px;
+}
+
+.validation-average-error strong {
+  color: #7ee7ef;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.validation-result-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.validation-result-card {
+  padding: 16px;
+  border: 1px solid rgb(126 231 239 / 0.16);
+  border-radius: 14px;
+  background: #09151b;
+}
+
+.validation-result-card > header strong {
+  color: #dffcff;
+}
+
+.validation-result-card > header span {
+  color: #8da7af;
+  font-size: 11px;
+}
+
+.validation-result-error {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 14px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgb(126 231 239 / 0.12);
+}
+
+.validation-result-error strong {
+  color: #7ee7ef;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.validation-result-metrics {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 7px 10px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.validation-result-metrics dt {
+  color: #8da7af;
+}
+
+.validation-result-metrics dd {
+  margin: 0;
+  color: #e9f6f8;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.validation-result-coordinates {
+  margin-top: 14px;
+  color: #a9c1ca;
+  font-size: 11px;
+}
+
+.validation-result-coordinates summary {
+  cursor: pointer;
+  color: #bfeff2;
+}
+
+.validation-result-coordinates p {
+  margin: 8px 0 0;
+  color: #a9c1ca;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
 }
 
 .validation-target-editor {
@@ -1574,7 +1694,8 @@ body.validation-active .controls-pane {
 
 @media (max-width: 800px) {
   .validation-setup,
-  .validation-mpr-grid {
+  .validation-mpr-grid,
+  .validation-result-list {
     grid-template-columns: 1fr;
   }
 

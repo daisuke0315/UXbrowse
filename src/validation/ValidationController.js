@@ -556,13 +556,72 @@ export class ValidationController {
     this.els.shell.classList.remove("is-response-stage");
     this.els.title.textContent = this.isPractice ? "練習完了" : "検証完了";
     this.els.completeTitle.textContent = this.isPractice ? "練習が完了しました" : "検証が完了しました";
+    this.renderResultReview();
     this.showOnly("complete");
     this.els.stepBadge.textContent = this.isPractice ? "PRACTICE DONE" : "COMPLETED";
     this.els.completeText.textContent = this.isPractice
-      ? "練習は完了です。結果は保存されていません。通常モードへ戻って本番を開始できます。"
-      : "結果は参加者画面には表示されません。研究担当者がCSVまたはJSONとして保存してください。";
+      ? "練習結果を確認できます。結果は保存されません。確認後、通常モードへ戻って本番を開始できます。"
+      : "結果を確認し、必要に応じてCSVまたはJSONとして保存してください。";
     this.els.csv.hidden = this.isPractice;
     this.els.json.hidden = this.isPractice;
+  }
+
+  renderResultReview() {
+    const trials = this.session?.trials?.filter((trial) => trial.status === "completed") ?? [];
+    const average = trials.length
+      ? trials.reduce((sum, trial) => sum + Number(trial.error_3d_mm || 0), 0) / trials.length
+      : 0;
+    this.els.averageError.textContent = trials.length ? `${average.toFixed(1)} mm` : "-";
+    const fragment = document.createDocumentFragment();
+    for (const trial of trials) {
+      const card = document.createElement("article");
+      card.className = "validation-result-card";
+
+      const header = document.createElement("header");
+      const condition = document.createElement("strong");
+      condition.textContent = trial.condition === "mpr" ? "MPR条件" : "提案ビューア条件";
+      const sequence = document.createElement("span");
+      sequence.textContent = `${this.isPractice ? "練習" : "試行"} ${trial.sequence_no}`;
+      header.append(condition, sequence);
+
+      const error = document.createElement("div");
+      error.className = "validation-result-error";
+      const errorLabel = document.createElement("span");
+      errorLabel.textContent = "3D誤差";
+      const errorValue = document.createElement("strong");
+      errorValue.textContent = `${Number(trial.error_3d_mm).toFixed(1)} mm`;
+      error.append(errorLabel, errorValue);
+
+      const metrics = document.createElement("dl");
+      metrics.className = "validation-result-metrics";
+      const metricValues = [
+        ["ΔX", `${signedFixed(trial.delta_xyz_mm[0])} mm`],
+        ["ΔY", `${signedFixed(trial.delta_xyz_mm[1])} mm`],
+        ["ΔZ", `${signedFixed(trial.delta_xyz_mm[2])} mm`],
+        ["回答時間", `${(trial.response_time_ms / 1000).toFixed(1)} 秒`],
+      ];
+      for (const [label, value] of metricValues) {
+        const term = document.createElement("dt");
+        term.textContent = label;
+        const description = document.createElement("dd");
+        description.textContent = value;
+        metrics.append(term, description);
+      }
+
+      const details = document.createElement("details");
+      details.className = "validation-result-coordinates";
+      const summary = document.createElement("summary");
+      summary.textContent = "座標詳細";
+      const target = document.createElement("p");
+      target.textContent = `正解: ${formatPoint(trial.target_xyz_mm)} mm`;
+      const answer = document.createElement("p");
+      answer.textContent = `回答: ${formatPoint(trial.answer_xyz_mm)} mm`;
+      details.append(summary, target, answer);
+
+      card.append(header, error, metrics, details);
+      fragment.append(card);
+    }
+    this.els.resultList.replaceChildren(fragment);
   }
 
   showOnly(name) {
@@ -766,6 +825,15 @@ function sanitizeId(value) {
 
 function fixed(value) {
   return Number(value).toFixed(3);
+}
+
+function signedFixed(value) {
+  const number = Number(value);
+  return `${number >= 0 ? "+" : ""}${number.toFixed(1)}`;
+}
+
+function formatPoint(point) {
+  return point.map((value) => Number(value).toFixed(1)).join(", ");
 }
 
 function download(name, content, type) {
