@@ -1093,6 +1093,29 @@ export class ThreeSceneManager {
     };
   }
 
+  resetValidationResponseCamera() {
+    if (!this.objModel || !this.camera || !this.controls) return null;
+    this.objModel.updateMatrixWorld(true);
+    const bounds = new this.THREE.Box3().setFromObject(this.objModel);
+    if (bounds.isEmpty()) return null;
+    const sphere = bounds.getBoundingSphere(new this.THREE.Sphere());
+    const pose = calculateValidationResponseCameraPose(
+      sphere.center.toArray(),
+      sphere.radius,
+    );
+    this.controls.target.set(...pose.target);
+    this.camera.position.set(...pose.position);
+    this.camera.up.set(...pose.up);
+    this.camera.zoom = 1;
+    this.camera.lookAt(this.controls.target);
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    this.foregroundSideSign = 0;
+    this.updateCameraClipping(true);
+    this.requestRender();
+    return this.getCameraPose();
+  }
+
   updateMprPlaneOverlay(canvas, result, request, options = {}) {
     if (!this.initialized || !this.mapper) return null;
     if (this.validationResponseMode) {
@@ -1579,6 +1602,23 @@ export function calculateValidationSphereSectionScale(distanceFromPlane, sphereR
   if (!(radius > 0) || !Number.isFinite(distance) || distance >= radius) return 0;
   const normalizedDistance = distance / radius;
   return Math.sqrt(Math.max(0, 1 - normalizedDistance * normalizedDistance));
+}
+
+export function calculateValidationResponseCameraPose(contentCenter, contentRadius, minimumDistance = 300) {
+  const center = Array.isArray(contentCenter) && contentCenter.length === 3
+    ? contentCenter.map((value) => Number(value) || 0)
+    : [0, 0, 0];
+  const radius = Math.max(0, Number(contentRadius) || 0);
+  const direction = [0, -1, 0.55];
+  const directionLength = Math.hypot(...direction);
+  const normalizedDirection = direction.map((value) => value / directionLength);
+  const distance = Math.max(minimumDistance, radius * 2.8);
+  return {
+    position: center.map((value, index) => value + normalizedDirection[index] * distance),
+    target: [...center],
+    up: [0, 0, 1],
+    distance,
+  };
 }
 
 export function calculateRequiredCameraFar(cameraPosition, contentCenter, contentRadius, minimumFar = 5000, padding = 1.1) {

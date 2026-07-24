@@ -18,7 +18,7 @@
       import { WindowingProcessor } from "./src/WindowingProcessor.js";
       import { volumeCenter, volumeVoxelCenterSpan } from "./src/VolumeGeometry.js";
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
-      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, calculateValidationSphereSectionScale, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=validation-target-magenta-1";
+      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, calculateValidationResponseCameraPose, calculateValidationSphereSectionScale, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=validation-response-camera-reset-1";
       import { dot, length } from "./src/math3d.js";
       import { buildTargets, calculateSliceOffsetRange, calculateSphereSectionRadius, calculateValidationError, projectPointToMprPixel } from "./src/validation/ValidationController.js?v=mpr-target-half-size-1";
 
@@ -127,6 +127,13 @@
           && close(calculateValidationSphereSectionScale(8, 10), 0.6),
       );
       assert("UT-135 validation sphere disappears outside section", calculateValidationSphereSectionScale(10, 10) === 0);
+      const responseCameraPose = calculateValidationResponseCameraPose([10, 20, 30], 100);
+      assert(
+        "UT-136 validation response camera uses fixed target and up",
+        responseCameraPose.target.every((value, index) => close(value, [10, 20, 30][index]))
+          && responseCameraPose.up.every((value, index) => close(value, [0, 0, 1][index])),
+      );
+      assert("UT-137 validation response camera fits model", close(responseCameraPose.distance, 300));
       const validationPlane = {
         visible: true,
         centerThree: [0, 0, 0],

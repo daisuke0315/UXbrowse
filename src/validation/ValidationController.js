@@ -434,6 +434,9 @@ export class ValidationController {
     trial.status = "responding";
     this.getScene().clearValidationMarkers();
     this.getScene().setValidationResponseMode(true);
+    // 観察時のカメラ姿勢は回答位置への手掛かりになるため引き継がず、
+    // 条件や操作履歴に依存しない標準姿勢から回答を開始する。
+    trial.response_camera_pose = this.getScene().resetValidationResponseCamera();
     this.els.shell.classList.add("is-viewer-stage");
     this.els.shell.classList.add("is-response-stage");
     this.els.mprGrid.hidden = true;
