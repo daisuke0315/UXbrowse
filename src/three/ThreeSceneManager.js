@@ -586,6 +586,9 @@ export class ThreeSceneManager {
     this.validationTargetMarker.material.depthTest = true;
     this.validationTargetMarker.material.depthWrite = false;
     this.validationTargetMarker.material.side = this.THREE.DoubleSide;
+    // Three.jsの透明DoubleSide既定動作（裏面→表面の2パス描画）を止める。
+    // 切断後の奥側球面は残しつつ、円が二重に重なる見え方を防ぐ。
+    this.validationTargetMarker.material.forceSinglePass = true;
     this.validationTargetMarker.material.needsUpdate = true;
     this.validationTargetMarker.userData.usesMprTransparency = true;
     this.ensureValidationOverlayLights();
