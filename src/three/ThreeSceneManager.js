@@ -625,7 +625,8 @@ export class ThreeSceneManager {
   getValidationMarkerTransparencyOptions() {
     return {
       ...this.foregroundOptions,
-      frontAlpha: calculateValidationMarkerFrontAlpha(this.foregroundOptions.frontAlpha),
+      // 検証マーカーの前景側は、可視光モデルと同じ断面で完全に切断する。
+      frontAlpha: 0,
     };
   }
 
@@ -1392,7 +1393,9 @@ export class ThreeSceneManager {
     const planeInfo = this.mprPlaneOverlay?.getPlaneInfo?.();
     const modelIsInFront = this.isModelInFrontOfValidationTarget();
     if (this.validationTargetMarker.userData.usesMprTransparency) {
-      this.validationTargetMarker.visible = true;
+      // マーカーはオーバーレイ層で描画するため、可視光モデルとの深度関係は
+      // raycastで明示的に反映する。MPRで切断されたモデル面は判定から除外される。
+      this.validationTargetMarker.visible = !modelIsInFront;
       return;
     }
     const planeIsInFront = isPointBehindDisplayPlane(
@@ -1464,7 +1467,9 @@ export class ThreeSceneManager {
       ? 1
       : 1 - smoothstep(foregroundDistance, foregroundDistance + fadeWidth, distanceFromPlane);
     const alpha = 1 + (visibility.frontAlpha - 1) * frontMask;
-    return alpha < 0.98;
+    // 可視光モデルが少しでも見えている交点は遮蔽物として扱う。
+    // マーカーを透過させるのは、MPRで完全切断（Alpha 0）された場所だけ。
+    return alpha <= 0.001;
   }
 
   useInteractivePixelRatio() {
@@ -1577,10 +1582,6 @@ export function calculateFocusAlignedCameraPose(cameraPosition, currentTarget, n
     camera: cameraPosition.map((value, index) => value + delta[index]),
     target: [...nextTarget],
   };
-}
-
-export function calculateValidationMarkerFrontAlpha(frontAlpha, minimum = 0.22) {
-  return Math.max(minimum, Math.min(1, Number(frontAlpha) || 0));
 }
 
 export function calculateRequiredCameraFar(cameraPosition, contentCenter, contentRadius, minimumFar = 5000, padding = 1.1) {

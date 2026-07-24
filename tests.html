@@ -18,7 +18,7 @@
       import { WindowingProcessor } from "./src/WindowingProcessor.js";
       import { volumeCenter, volumeVoxelCenterSpan } from "./src/VolumeGeometry.js";
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
-      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, calculateValidationMarkerFrontAlpha, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=proposal-target-mpr-transparency-5";
+      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=proposal-target-depth-cut-1";
       import { dot, length } from "./src/math3d.js";
       import { buildTargets, calculateSliceOffsetRange, calculateSphereSectionRadius, calculateValidationError, projectPointToMprPixel } from "./src/validation/ValidationController.js?v=mpr-sphere-section-1";
 
@@ -120,8 +120,6 @@
           && attachedPose.camera.map((value, index) => value - attachedPose.target[index])
             .every((value, index) => close(value, [9, 18, 27][index])),
       );
-      assert("UT-133 validation sphere remains visible when model is cut", close(calculateValidationMarkerFrontAlpha(0), 0.22));
-      assert("UT-134 validation sphere follows higher foreground alpha", close(calculateValidationMarkerFrontAlpha(0.65), 0.65));
       const validationPlane = {
         visible: true,
         centerThree: [0, 0, 0],
