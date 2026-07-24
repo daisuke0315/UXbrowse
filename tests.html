@@ -20,7 +20,7 @@
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
       import { ThreeSceneManager, calculateRequiredCameraFar, calculateRequiredCameraNear, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=validation-marker-plane-depth";
       import { dot, length } from "./src/math3d.js";
-      import { buildTargets, calculateSliceOffsetRange, calculateValidationError, projectPointToMprPixel } from "./src/validation/ValidationController.js?v=linked-mpr-crosshair";
+      import { buildTargets, calculateSliceOffsetRange, calculateSphereSectionRadius, calculateValidationError, projectPointToMprPixel } from "./src/validation/ValidationController.js?v=mpr-sphere-section-1";
 
       const lines = [];
       function assert(name, condition, details = "") {
@@ -72,6 +72,9 @@
         "UT-305 linked MPR crosshair projection",
         close(projectedCrosshair.x, 55) && close(projectedCrosshair.y, 48),
       );
+      assert("UT-306 sphere section at center", close(calculateSphereSectionRadius(10, 0), 10));
+      assert("UT-307 sphere section near edge", close(calculateSphereSectionRadius(10, 8), 6));
+      assert("UT-308 sphere section outside", calculateSphereSectionRadius(10, 11) === 0);
 
       const data = new Int16Array(8);
       for (let i = 0; i < data.length; i += 1) data[i] = i;

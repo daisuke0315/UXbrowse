@@ -403,6 +403,7 @@ export class ValidationController {
       this.getMprIntersectionPoint(),
       this.mprTarget,
       offsetMm,
+      Math.max(12, this.getScene()?.getValidationTargetRadiusDicom?.() ?? 12),
       definition,
       this.mprDefinitions,
     );
@@ -742,6 +743,7 @@ function drawLinkedMprCrosshair(
   intersectionPoint,
   targetPoint,
   offsetMm,
+  targetRadiusMm,
   currentDefinition,
   definitions,
 ) {
@@ -776,6 +778,8 @@ function drawLinkedMprCrosshair(
     context,
     projectPointToMprPixel(result, request, targetPoint),
     offsetMm,
+    targetRadiusMm,
+    request,
     result.width,
     result.height,
   );
@@ -808,30 +812,38 @@ function drawIntersectionPoint(context, point) {
   context.fill();
 }
 
-function drawMprTargetMarker(context, point, offsetMm, width, height) {
+function drawMprTargetMarker(context, point, offsetMm, sphereRadiusMm, request, width, height) {
   if (point.x < 0 || point.x > width - 1 || point.y < 0 || point.y > height - 1) return;
-  const alpha = Math.max(0.8, Math.max(0, 1 - Math.abs(offsetMm) / 12));
+  const sectionRadiusMm = calculateSphereSectionRadius(sphereRadiusMm, offsetMm);
+  if (sectionRadiusMm <= 0) return;
+  const radiusX = Math.max(1, sectionRadiusMm / request.spacingU);
+  const radiusY = Math.max(1, sectionRadiusMm / request.spacingV);
   const draw = () => {
     context.beginPath();
-    context.arc(point.x, point.y, 8, 0, Math.PI * 2);
-    context.moveTo(point.x - 14, point.y);
-    context.lineTo(point.x - 10, point.y);
-    context.moveTo(point.x + 10, point.y);
-    context.lineTo(point.x + 14, point.y);
-    context.moveTo(point.x, point.y - 14);
-    context.lineTo(point.x, point.y - 10);
-    context.moveTo(point.x, point.y + 10);
-    context.lineTo(point.x, point.y + 14);
-    context.stroke();
+    context.ellipse(point.x, point.y, radiusX, radiusY, 0, 0, Math.PI * 2);
   };
-  context.setLineDash(Math.abs(offsetMm) > 0.5 ? [3, 2] : []);
-  context.strokeStyle = `rgb(0 0 0 / ${Math.min(0.85, alpha + 0.25)})`;
-  context.lineWidth = 5;
+  context.fillStyle = "rgb(98 240 167 / 0.62)";
   draw();
-  context.strokeStyle = `rgb(255 214 92 / ${alpha})`;
-  context.lineWidth = 2.25;
+  context.fill();
+  context.strokeStyle = "rgb(0 0 0 / 0.82)";
+  context.lineWidth = 3.5;
   draw();
-  context.setLineDash([]);
+  context.stroke();
+  context.strokeStyle = "rgb(170 255 207 / 1)";
+  context.lineWidth = 2;
+  draw();
+  context.stroke();
+  context.fillStyle = "rgb(220 255 236 / 0.95)";
+  context.beginPath();
+  context.arc(point.x - radiusX * 0.28, point.y - radiusY * 0.28, Math.max(0.8, Math.min(radiusX, radiusY) * 0.13), 0, Math.PI * 2);
+  context.fill();
+}
+
+export function calculateSphereSectionRadius(sphereRadius, planeDistance) {
+  const radius = Math.max(0, Number(sphereRadius) || 0);
+  const distance = Math.abs(Number(planeDistance) || 0);
+  if (radius === 0 || distance >= radius) return 0;
+  return Math.sqrt(radius * radius - distance * distance);
 }
 
 export function projectPointToMprPixel(result, request, point) {

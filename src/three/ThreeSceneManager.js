@@ -566,6 +566,21 @@ export class ThreeSceneManager {
     });
   }
 
+  getValidationTargetRadiusDicom() {
+    const radius = this.validationTargetMarker?.userData?.validationRadius;
+    if (!this.mapper || !Number.isFinite(radius) || radius <= 0) return null;
+    const axisRadii = [
+      [radius, 0, 0],
+      [0, radius, 0],
+      [0, 0, radius],
+    ].map((axis) => {
+      const vector = this.mapper.threeVectorToDicom(axis);
+      return Math.hypot(vector[0], vector[1], vector[2]);
+    }).filter((value) => Number.isFinite(value) && value > 0);
+    if (!axisRadii.length) return null;
+    return axisRadii.reduce((sum, value) => sum + value, 0) / axisRadii.length;
+  }
+
   showValidationAnswer(dicomPoint) {
     this.clearValidationAnswer();
     this.validationAnswerMarker = this.createValidationMarker(dicomPoint, 0x7ee7ef, 1, { opacity: 0.52 });
