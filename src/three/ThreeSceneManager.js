@@ -558,7 +558,7 @@ export class ThreeSceneManager {
 
   showValidationTarget(dicomPoint) {
     this.clearValidationTarget();
-    this.validationTargetMarker = this.createValidationMarker(dicomPoint, 0x62f0a7, 1.2);
+    this.validationTargetMarker = this.createValidationMarker(dicomPoint, 0x62f0a7, 1.2, { opacity: 0.58 });
   }
 
   showValidationAnswer(dicomPoint) {

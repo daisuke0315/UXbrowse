@@ -621,7 +621,7 @@ function drawMprWithTarget(canvas, result, offsetMm = 0) {
   context.putImageData(new ImageData(result.rgba, result.width, result.height), 0, 0);
   const x = result.width / 2;
   const y = result.height / 2;
-  const alpha = Math.max(0.22, 1 - Math.abs(offsetMm) / 12);
+  const alpha = Math.max(0.16, 0.58 * Math.max(0, 1 - Math.abs(offsetMm) / 12));
   context.strokeStyle = `rgb(98 240 167 / ${alpha})`;
   context.lineWidth = 2;
   context.setLineDash(Math.abs(offsetMm) > 0.5 ? [6, 5] : []);

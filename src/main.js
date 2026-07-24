@@ -7,12 +7,12 @@ import { ValidationLogger } from "./ValidationLogger.js";
 import { formatVector } from "./math3d.js";
 import { volumeCenter } from "./VolumeGeometry.js";
 import { viewerConfig } from "./config/viewerConfig.js?v=interaction-defaults-1";
-import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=validation-xray-gizmo-1";
+import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=validation-transparent-target-1";
 import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController, constrainDicomInputToPlane } from "./three/DynamicMprController.js?v=fixed-mpr-plane-2";
 import { MprUpdateScheduler } from "./three/MprUpdateScheduler.js";
-import { ValidationController } from "./validation/ValidationController.js?v=practice-target-1";
+import { ValidationController } from "./validation/ValidationController.js?v=transparent-target-1";
 
 const logger = new ValidationLogger();
 const loader = new DicomLoader(logger);
