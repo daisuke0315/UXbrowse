@@ -1349,11 +1349,14 @@ export class ThreeSceneManager {
     const radius = this.validationTargetMarker.userData.validationRadius ?? 0;
     if (targetDistance <= Math.max(1e-4, radius)) return false;
     direction.normalize();
+    // 正解点がモデル表面にある場合の自己交差だけを除外する。
+    // 球半径の大部分を除外すると、表面直下へ入った球まで前面扱いになる。
+    const surfaceBias = Math.max(0.15, Math.min(1, radius * 0.08));
     const raycaster = new this.THREE.Raycaster(
       this.camera.position,
       direction,
       0,
-      Math.max(0, targetDistance - radius * 0.65),
+      Math.max(0, targetDistance - surfaceBias),
     );
     this.objModel.updateMatrixWorld(true);
     return raycaster.intersectObject(this.objModel, true).length > 0;
