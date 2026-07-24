@@ -577,10 +577,6 @@ export class ValidationController {
 
   renderResultReview() {
     const trials = this.session?.trials?.filter((trial) => trial.status === "completed") ?? [];
-    const average = trials.length
-      ? trials.reduce((sum, trial) => sum + Number(trial.error_3d_mm || 0), 0) / trials.length
-      : 0;
-    this.els.averageError.textContent = trials.length ? `${average.toFixed(1)} mm` : "-";
     const fragment = document.createDocumentFragment();
     for (const trial of trials) {
       const card = document.createElement("article");

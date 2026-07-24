@@ -1615,26 +1615,9 @@ body.validation-active .controls-pane {
   font-size: 20px;
 }
 
-.validation-average-error {
-  display: grid;
-  gap: 3px;
-  min-width: 140px;
-  padding: 10px 14px;
-  border: 1px solid rgb(126 231 239 / 0.2);
-  border-radius: 12px;
-  text-align: right;
-}
-
-.validation-average-error span,
 .validation-result-error span {
   color: #9eb7bf;
   font-size: 11px;
-}
-
-.validation-average-error strong {
-  color: #7ee7ef;
-  font-size: 22px;
-  font-variant-numeric: tabular-nums;
 }
 
 .validation-result-list {
