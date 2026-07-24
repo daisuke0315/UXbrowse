@@ -581,9 +581,10 @@ export class ThreeSceneManager {
     this.validationTargetMarker.userData.validationRadius = radius;
     this.validationTargetMarker.geometry.dispose();
     this.validationTargetMarker.material.dispose();
-    this.validationTargetMarker.geometry = new this.THREE.CircleGeometry(radius, 36);
+    const texture = this.createValidationMprSphereTexture();
+    this.validationTargetMarker.geometry = new this.THREE.PlaneGeometry(radius * 2.4, radius * 2.4);
     this.validationTargetMarker.material = new this.THREE.MeshBasicMaterial({
-      color: 0x3cff8f,
+      map: texture,
       transparent: true,
       opacity: 1,
       depthTest: false,
@@ -604,10 +605,60 @@ export class ThreeSceneManager {
     this.requestRender();
   }
 
+  createValidationMprSphereTexture() {
+    const size = 128;
+    const center = size / 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext("2d");
+    context.clearRect(0, 0, size, size);
+
+    context.fillStyle = "rgb(0 0 0 / 0.72)";
+    context.beginPath();
+    context.arc(center, center, 53, 0, Math.PI * 2);
+    context.fill();
+
+    const gradient = context.createRadialGradient(47, 43, 5, center, center, 47);
+    gradient.addColorStop(0, "rgb(235 255 244 / 1)");
+    gradient.addColorStop(0.18, "rgb(145 255 194 / 1)");
+    gradient.addColorStop(0.62, "rgb(60 255 143 / 1)");
+    gradient.addColorStop(1, "rgb(15 139 76 / 1)");
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(center, center, 47, 0, Math.PI * 2);
+    context.fill();
+
+    context.strokeStyle = "rgb(184 255 215 / 1)";
+    context.lineWidth = 4;
+    context.beginPath();
+    context.arc(center, center, 47, 0, Math.PI * 2);
+    context.stroke();
+
+    context.fillStyle = "rgb(255 255 255 / 0.78)";
+    context.beginPath();
+    context.ellipse(48, 43, 11, 7, -0.45, 0, Math.PI * 2);
+    context.fill();
+
+    context.strokeStyle = "rgb(224 255 237 / 0.92)";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(center - 6, center);
+    context.lineTo(center + 6, center);
+    context.moveTo(center, center - 6);
+    context.lineTo(center, center + 6);
+    context.stroke();
+
+    const texture = new this.THREE.CanvasTexture(canvas);
+    texture.colorSpace = this.THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
   syncValidationTargetToMprPlane(planeInfo = this.mprPlaneOverlay?.getPlaneInfo?.()) {
     const marker = this.validationTargetMarker;
     if (!marker?.userData?.attachedToMpr) return;
-    if (!isMprPlaneRenderable(planeInfo) || !this.mprPlaneOverlay?.mesh) {
+    if (!isMprPlaneRenderable(planeInfo) || !this.validationOverlayScene) {
       marker.visible = false;
       return;
     }
@@ -615,15 +666,23 @@ export class ThreeSceneManager {
     const sourceCenter = new this.THREE.Vector3(...planeInfo.sourceCenterThree);
     const sourceU = new this.THREE.Vector3(...planeInfo.sourceUThree);
     const sourceV = new this.THREE.Vector3(...planeInfo.sourceVThree);
+    const displayCenter = new this.THREE.Vector3(...planeInfo.centerThree);
+    const displayU = new this.THREE.Vector3(...planeInfo.uThree).normalize();
+    const displayV = new this.THREE.Vector3(...planeInfo.vThree).normalize();
+    const displayN = new this.THREE.Vector3(...planeInfo.nThree).normalize();
     const relative = sourcePosition.sub(sourceCenter);
     const displayScale = planeInfo.cameraPlaneScale ?? 1;
-    if (marker.parent !== this.mprPlaneOverlay.mesh) this.mprPlaneOverlay.mesh.add(marker);
-    marker.position.set(
-      relative.dot(sourceU) * displayScale,
-      relative.dot(sourceV) * displayScale,
-      -Math.max(0.02, (marker.userData.validationRadius ?? 5) * 0.01),
+    const displayPosition = displayCenter
+      .addScaledVector(displayU, relative.dot(sourceU) * displayScale)
+      .addScaledVector(displayV, relative.dot(sourceV) * displayScale);
+    const towardCamera = this.camera.position.clone().sub(displayPosition).normalize();
+    displayPosition.addScaledVector(
+      towardCamera,
+      Math.max(0.02, (marker.userData.validationRadius ?? 5) * 0.01),
     );
-    marker.quaternion.identity();
+    if (marker.parent !== this.validationOverlayScene) this.validationOverlayScene.add(marker);
+    marker.position.copy(displayPosition);
+    marker.setRotationFromMatrix(new this.THREE.Matrix4().makeBasis(displayU, displayV, displayN));
     marker.visible = true;
     marker.updateMatrixWorld(true);
   }
