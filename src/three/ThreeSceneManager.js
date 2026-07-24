@@ -584,12 +584,12 @@ export class ThreeSceneManager {
     this.validationResultMarkers = [];
     const styles = {
       mpr: {
-        target: { color: 0x62f0a7, scale: 1, label: "M正", labelOffset: [-62, -48] },
-        answer: { color: 0xffb45e, scale: 1, label: "M答", labelOffset: [-62, 48] },
+        target: { color: 0x62f0a7, scale: 1.3, label: "M正", labelOffset: [-62, -48] },
+        answer: { color: 0xffb45e, scale: 1.3, label: "M答", labelOffset: [-62, 48] },
       },
       proposal: {
-        target: { color: 0x59a8ff, scale: 1, label: "P正", labelOffset: [62, -48] },
-        answer: { color: 0xf38bdc, scale: 1, label: "P答", labelOffset: [62, 48] },
+        target: { color: 0x59a8ff, scale: 1.3, label: "P正", labelOffset: [62, -48] },
+        answer: { color: 0xf38bdc, scale: 1.3, label: "P答", labelOffset: [62, 48] },
       },
     };
     for (const trial of trials ?? []) {
@@ -602,6 +602,9 @@ export class ThreeSceneManager {
   }
 
   addValidationResultPoint(dicomPoint, style, name) {
+    const point = this.mapper?.dicomPointToThree?.(dicomPoint);
+    if (!point) return;
+    this.addValidationResultAnchor(point, style.color, name);
     const visible = this.createValidationMarker(dicomPoint, style.color, style.scale, {
       opacity: 0.96,
       depthTest: true,
@@ -619,6 +622,45 @@ export class ThreeSceneManager {
     });
     if (visible) this.validationResultMarkers.push(visible);
     if (xray) this.validationResultMarkers.push(xray);
+  }
+
+  addValidationResultAnchor(point, color, name) {
+    const radius = this.hasSceneContentBounds
+      ? Math.max(2.2, this.sceneContentSphere.radius * 0.018)
+      : 4;
+    const layers = [
+      {
+        scene: this.scene,
+        opacity: 0.98,
+        depthTest: true,
+        renderOrder: 998,
+        suffix: "",
+      },
+      {
+        scene: this.validationOverlayScene,
+        opacity: 0.28,
+        depthTest: false,
+        renderOrder: 999,
+        suffix: "-xray",
+      },
+    ];
+    for (const layer of layers) {
+      const geometry = new this.THREE.SphereGeometry(radius, 20, 14);
+      const material = new this.THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: layer.opacity,
+        depthTest: layer.depthTest,
+        depthWrite: false,
+        toneMapped: false,
+      });
+      const anchor = new this.THREE.Mesh(geometry, material);
+      anchor.position.set(...point);
+      anchor.renderOrder = layer.renderOrder;
+      anchor.name = `validation-result-${name}-anchor${layer.suffix}`;
+      layer.scene.add(anchor);
+      this.validationResultMarkers.push(anchor);
+    }
   }
 
   getValidationInitialAnswerPoint() {
