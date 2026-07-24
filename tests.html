@@ -18,7 +18,7 @@
       import { WindowingProcessor } from "./src/WindowingProcessor.js";
       import { volumeCenter, volumeVoxelCenterSpan } from "./src/VolumeGeometry.js";
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
-      import { ThreeSceneManager, calculateRequiredCameraFar, calculateRequiredCameraNear, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=double-sided-depth";
+      import { ThreeSceneManager, calculateRequiredCameraFar, calculateRequiredCameraNear, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=validation-marker-plane-depth";
       import { dot, length } from "./src/math3d.js";
       import { buildTargets, calculateSliceOffsetRange, calculateValidationError } from "./src/validation/ValidationController.js?v=transparent-target-1";
 
@@ -93,6 +93,18 @@
       assert("UT-124 camera far follows distance", close(calculateRequiredCameraFar([0, 0, -6000], [0, 0, 0], 1000), 7700));
       assert("UT-125 camera near follows empty space", close(calculateRequiredCameraNear([0, 0, -6000], [0, 0, 0], 1000), 1250));
       assert("UT-126 camera near protects MPR", close(calculateRequiredCameraNear([0, 0, -6000], [0, 0, 0], 1000, 0.1, 1500), 375));
+      const validationPlane = {
+        visible: true,
+        centerThree: [0, 0, 0],
+        nThree: [0, 0, 1],
+        uThree: [1, 0, 0],
+        vThree: [0, 1, 0],
+        widthMm: 100,
+        heightMm: 100,
+      };
+      assert("UT-129 marker behind MPR", isPointBehindDisplayPlane([0, 0, 100], [0, 0, -50], validationPlane));
+      assert("UT-130 marker in front of MPR", !isPointBehindDisplayPlane([0, 0, 100], [0, 0, 50], validationPlane));
+      assert("UT-131 marker outside MPR FOV", !isPointBehindDisplayPlane([0, 0, 100], [120, 0, -50], validationPlane));
 
       const fakeSourceMaterial = {
         name: "photogrammetry",

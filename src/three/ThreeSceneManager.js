@@ -560,7 +560,7 @@ export class ThreeSceneManager {
   showValidationTarget(dicomPoint) {
     this.clearValidationTarget();
     this.validationTargetMarker = this.createValidationMarker(dicomPoint, 0x62f0a7, 1.2, {
-      opacity: 0.58,
+      opacity: 1,
       depthTest: true,
     });
     this.validationTargetXrayMarker = this.createValidationMarker(dicomPoint, 0x62f0a7, 1.2, {
@@ -1140,6 +1140,7 @@ export class ThreeSceneManager {
     this.renderFrameId = null;
     if (!this.running) return;
     if (this.controls) this.controls.update();
+    this.updateValidationTargetPlaneOcclusion();
     this.updateCameraClipping();
     const useOit = this.foregroundOptions.enabled
       && this.foregroundOptions.frontAlpha > 0
@@ -1187,6 +1188,19 @@ export class ThreeSceneManager {
     } finally {
       this.renderer.autoClear = originalAutoClear;
     }
+  }
+
+  updateValidationTargetPlaneOcclusion() {
+    if (!this.validationTargetMarker || !this.camera) return;
+    const planeInfo = this.mprPlaneOverlay?.getPlaneInfo?.();
+    const planeIsInFront = isPointBehindDisplayPlane(
+      this.camera.position.toArray(),
+      this.validationTargetMarker.position.toArray(),
+      planeInfo,
+    );
+    // MPRがマーカーより手前にある場合だけ通常レイヤーを隠し、
+    // 最終描画のx-rayレイヤー（半透明）を見せる。MPRが奥なら不透明表示する。
+    this.validationTargetMarker.visible = !planeIsInFront;
   }
 
   useInteractivePixelRatio() {
@@ -1312,6 +1326,35 @@ export function calculateRequiredCameraNear(cameraPosition, contentCenter, conte
     : Number.POSITIVE_INFINITY;
   // 最も近い表示対象の25%までnearを前進させ、手前を切らずに深度分解能を確保する。
   return Math.max(minimumNear, Math.min(nearestContentDistance, nearestProtectedDistance) * 0.25);
+}
+
+export function isPointBehindDisplayPlane(cameraPosition, pointPosition, planeInfo, epsilon = 1e-4) {
+  if (!planeInfo?.visible || !Array.isArray(cameraPosition) || !Array.isArray(pointPosition)) return false;
+  const center = planeInfo.centerThree;
+  const normal = planeInfo.nThree;
+  const u = planeInfo.uThree;
+  const v = planeInfo.vThree;
+  const width = Number(planeInfo.widthMm);
+  const height = Number(planeInfo.heightMm);
+  if (![center, normal, u, v].every((value) => Array.isArray(value) && value.length === 3)) return false;
+  if (!(width > 0) || !(height > 0)) return false;
+
+  const direction = pointPosition.map((value, index) => value - cameraPosition[index]);
+  const cameraToPlane = center.map((value, index) => value - cameraPosition[index]);
+  const denominator = dot3(direction, normal);
+  if (Math.abs(denominator) <= epsilon) return false;
+  const intersectionRatio = dot3(cameraToPlane, normal) / denominator;
+  if (intersectionRatio <= epsilon || intersectionRatio >= 1 - epsilon) return false;
+
+  const intersectionOffset = direction.map((value, index) =>
+    cameraPosition[index] + value * intersectionRatio - center[index]
+  );
+  return Math.abs(dot3(intersectionOffset, u)) <= width / 2 + epsilon
+    && Math.abs(dot3(intersectionOffset, v)) <= height / 2 + epsilon;
+}
+
+function dot3(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
 function normalizeLocalResourcePath(value) {
