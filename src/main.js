@@ -12,7 +12,7 @@ import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController, constrainDicomInputToPlane } from "./three/DynamicMprController.js?v=fixed-mpr-plane-2";
 import { MprUpdateScheduler } from "./three/MprUpdateScheduler.js";
-import { ValidationController } from "./validation/ValidationController.js?v=mpr-default-zoom-200-1";
+import { ValidationController } from "./validation/ValidationController.js?v=mpr-target-half-size-1";
 
 const logger = new ValidationLogger();
 const loader = new DicomLoader(logger);
