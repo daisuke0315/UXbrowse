@@ -1,5 +1,6 @@
 const STORAGE_KEY = "viewsync.validation.phase1.sessions.v1";
-const APP_VERSION = "validation-phase1-1";
+const TARGETS_KEY = "viewsync.validation.phase1.targets.v1";
+const APP_VERSION = "validation-phase1-2";
 
 export class ValidationController {
   constructor({
@@ -26,6 +27,11 @@ export class ValidationController {
     this.answerDicom = null;
     this.pointerStart = null;
     this.mprTarget = null;
+    this.isPractice = false;
+    this.config = null;
+    this.targetDraftDicom = null;
+    this.targetBaseDicom = null;
+    this.pickingPurpose = null;
     this.mprDefinitions = [
       { normal: [1, 0, 0], up: [0, 0, -1], canvas: elements.sagittal, slider: elements.sagittalOffset, output: elements.sagittalOffsetValue },
       { normal: [0, 1, 0], up: [0, 0, -1], canvas: elements.coronal, slider: elements.coronalOffset, output: elements.coronalOffsetValue },
@@ -35,7 +41,9 @@ export class ValidationController {
   }
 
   installEvents() {
-    this.els.entry.addEventListener("click", () => this.open());
+    this.els.entry.addEventListener("click", () => this.open(false));
+    this.els.practiceEntry.addEventListener("click", () => this.open(true));
+    this.els.targetEntry.addEventListener("click", () => void this.openTargetEditor());
     this.els.cancel.addEventListener("click", () => this.close());
     this.els.finish.addEventListener("click", () => this.close());
     this.els.form.addEventListener("submit", (event) => {
@@ -47,6 +55,16 @@ export class ValidationController {
     this.els.confirmAnswer.addEventListener("click", () => this.confirmAnswer());
     this.els.csv.addEventListener("click", () => this.downloadCsv());
     this.els.json.addEventListener("click", () => this.downloadJson());
+    this.els.targetDataset.addEventListener("change", () => {
+      void this.prepareTargetEditorDataset().catch((error) => {
+        this.els.targetStatus.textContent = `データを変更できません：${error.message}`;
+      });
+    });
+    this.els.targetSlot.addEventListener("change", () => this.loadTargetDraft());
+    this.els.targetReset.addEventListener("click", () => this.resetTargetDraft());
+    this.els.targetSave.addEventListener("click", () => this.saveTargetDraft());
+    this.els.targetExport.addEventListener("click", () => this.exportTargetOverrides());
+    this.els.targetClose.addEventListener("click", () => this.close());
     for (const definition of this.mprDefinitions) {
       definition.slider.addEventListener("input", () => this.renderMprPlane(definition));
       definition.canvas.addEventListener("wheel", (event) => {
@@ -63,13 +81,149 @@ export class ValidationController {
     }
   }
 
-  open() {
+  open(practice = false) {
+    this.isPractice = practice;
     document.body.classList.add("validation-active");
     this.els.shell.hidden = false;
     this.els.shell.classList.remove("is-viewer-stage");
     this.els.shell.classList.remove("is-response-stage");
     this.showOnly("setup");
-    this.els.participant.focus();
+    this.els.title.textContent = practice ? "練習モード設定" : "検証モード設定";
+    this.els.participantBadge.textContent = practice ? "練習" : "未開始";
+    this.els.stepBadge.textContent = "SETUP";
+    this.els.participantField.hidden = practice;
+    this.els.participant.required = !practice;
+    this.els.start.textContent = practice ? "練習を開始" : "検証を開始";
+    this.els.setupDescription.textContent = practice
+      ? "研究用IDを使わず、MPR条件と提案ビューア条件の一連の操作を練習します。"
+      : "氏名は入力せず、研究用IDのみを使用します。2条件の観察後、可視光モデル上で記憶した位置を回答します。";
+    this.els.csv.hidden = false;
+    this.els.json.hidden = false;
+    this.els.status.textContent = practice
+      ? "練習結果は保存されません。MPR・提案ビューアの両方を操作できます。"
+      : "開始時にデータと座標系を確認します。";
+    if (!practice) this.els.participant.focus();
+  }
+
+  async openTargetEditor() {
+    this.isPractice = false;
+    document.body.classList.add("validation-active");
+    this.els.shell.hidden = false;
+    this.els.shell.classList.add("is-viewer-stage");
+    this.els.shell.classList.remove("is-response-stage");
+    this.showOnly("targetEditor");
+    this.els.title.textContent = "正解座標設定";
+    this.els.participantBadge.textContent = "研究担当者";
+    this.els.stepBadge.textContent = "TARGET SETUP";
+    this.els.targetDataset.value = this.els.dataset.value;
+    this.els.targetStatus.textContent = "データと座標系を確認しています...";
+    try {
+      await this.loadConfig();
+      this.populateTargetSlots();
+      await this.prepareTargetEditorDataset();
+    } catch (error) {
+      this.els.targetStatus.textContent = `正解座標設定を開始できません：${error.message}`;
+    }
+  }
+
+  populateTargetSlots() {
+    const datasetConfig = this.config?.datasets?.[this.els.targetDataset.value];
+    const definitions = [
+      ...(datasetConfig?.practice_targets ?? []).map((definition, index) => ({
+        ...definition,
+        label: `練習ターゲット ${index + 1}`,
+      })),
+      ...(datasetConfig?.targets ?? []).map((definition, index) => ({
+        ...definition,
+        label: `本番ターゲット ${index + 1}`,
+      })),
+    ];
+    const previous = this.els.targetSlot.value;
+    this.els.targetSlot.replaceChildren(...definitions.map((definition) => {
+      const option = document.createElement("option");
+      option.value = definition.target_id;
+      option.textContent = definition.label;
+      option.dataset.definition = JSON.stringify(definition);
+      return option;
+    }));
+    if (definitions.some((definition) => definition.target_id === previous)) {
+      this.els.targetSlot.value = previous;
+    }
+  }
+
+  async prepareTargetEditorDataset() {
+    this.detachPicking();
+    this.getScene()?.clearValidationMarkers();
+    this.els.targetSave.disabled = true;
+    this.els.targetStatus.textContent = "データを読み込んでいます...";
+    this.populateTargetSlots();
+    const datasetId = this.els.targetDataset.value;
+    await this.loadDataset(datasetId);
+    if (!this.getVolume() || !this.getScene()?.getObjSummary?.() || !this.getMapper()) {
+      throw new Error("CT、モデル、座標変換を準備できませんでした。");
+    }
+    this.getScene().setValidationResponseMode(false);
+    this.restoreViewer({ validation: true });
+    this.loadTargetDraft();
+  }
+
+  loadTargetDraft() {
+    const option = this.els.targetSlot.selectedOptions[0];
+    if (!option || !this.getVolume()) return;
+    const definition = JSON.parse(option.dataset.definition);
+    const datasetId = this.els.targetDataset.value;
+    const override = readTargetOverrides()[datasetId]?.[definition.target_id];
+    const target = buildTargets(
+      this.getVolume().metadata,
+      [definition],
+      override ? { [definition.target_id]: override } : {}
+    )[0];
+    this.targetBaseDicom = [...target.xyz];
+    this.targetDraftDicom = [...target.xyz];
+    this.getScene().showValidationAnswer(this.targetDraftDicom);
+    this.updateTargetReadout();
+    this.els.targetSave.disabled = false;
+    this.els.targetStatus.textContent = override
+      ? "このブラウザに保存された正解座標を表示しています。"
+      : "研究設定の初期座標を表示しています。ギズモで調整してください。";
+    this.attachPicking("target");
+  }
+
+  resetTargetDraft() {
+    if (!this.targetBaseDicom) return;
+    this.targetDraftDicom = [...this.targetBaseDicom];
+    this.getScene().showValidationAnswer(this.targetDraftDicom);
+    this.updateTargetReadout();
+    this.els.targetStatus.textContent = "編集開始時の座標に戻しました。";
+  }
+
+  saveTargetDraft() {
+    if (!this.targetDraftDicom || !this.els.targetSlot.value) return;
+    const overrides = readTargetOverrides();
+    const datasetId = this.els.targetDataset.value;
+    overrides[datasetId] ??= {};
+    overrides[datasetId][this.els.targetSlot.value] = this.targetDraftDicom.map(Number);
+    localStorage.setItem(TARGETS_KEY, JSON.stringify(overrides));
+    this.targetBaseDicom = [...this.targetDraftDicom];
+    this.els.targetStatus.textContent = "正解座標をこのブラウザに保存しました。本番・練習で優先使用されます。";
+  }
+
+  exportTargetOverrides() {
+    const payload = {
+      format: "viewsync-validation-targets",
+      version: 1,
+      exported_at: new Date().toISOString(),
+      datasets: readTargetOverrides(),
+    };
+    download("viewsync-validation-targets.json", JSON.stringify(payload, null, 2), "application/json");
+  }
+
+  updateTargetReadout() {
+    const values = this.targetDraftDicom ?? [];
+    [this.els.targetX, this.els.targetY, this.els.targetZ].forEach((output, index) => {
+      output.textContent = Number.isFinite(values[index]) ? `${values[index].toFixed(2)} mm` : "-";
+      output.title = output.textContent;
+    });
   }
 
   close() {
@@ -80,15 +234,19 @@ export class ValidationController {
     this.els.shell.hidden = true;
     this.els.shell.classList.remove("is-viewer-stage");
     this.els.shell.classList.remove("is-response-stage");
+    this.targetDraftDicom = null;
+    this.targetBaseDicom = null;
   }
 
   async start() {
-    const participantId = sanitizeId(this.els.participant.value);
-    if (!participantId) {
+    const participantId = this.isPractice
+      ? `PRACTICE-${Date.now()}`
+      : sanitizeId(this.els.participant.value);
+    if (!this.isPractice && !participantId) {
       this.els.status.textContent = "研究用IDを入力してください。";
       return;
     }
-    if (readSessions().some((session) => session.participant_id === participantId)) {
+    if (!this.isPractice && readSessions().some((session) => session.participant_id === participantId)) {
       this.els.status.textContent = "この研究用IDは既に使用されています。上書きはできません。";
       return;
     }
@@ -96,17 +254,19 @@ export class ValidationController {
     this.els.form.querySelector("button[type=submit]").disabled = true;
     try {
       const datasetId = this.els.dataset.value;
-      const configResponse = await fetch("./data/validation/study-config.phase1.json");
-      if (!configResponse.ok) throw new Error("研究設定を読み込めませんでした。");
-      const config = await configResponse.json();
+      const config = await this.loadConfig();
       await this.loadDataset(datasetId);
       const volume = this.getVolume();
       const scene = this.getScene();
       const mapper = this.getMapper();
       if (!volume || !scene?.getObjSummary?.() || !mapper) throw new Error("CT、モデル、座標変換を準備できませんでした。");
-      const targetDefinitions = config.datasets?.[datasetId]?.targets;
-      if (!Array.isArray(targetDefinitions) || targetDefinitions.length < 2) throw new Error("ターゲット定義が不足しています。");
-      const targets = buildTargets(volume.metadata, targetDefinitions);
+      const datasetConfig = config.datasets?.[datasetId];
+      const targetDefinitions = this.isPractice ? datasetConfig?.practice_targets : datasetConfig?.targets;
+      const minimumTargetCount = this.isPractice ? 1 : 2;
+      if (!Array.isArray(targetDefinitions) || targetDefinitions.length < minimumTargetCount) {
+        throw new Error(this.isPractice ? "練習用ターゲット定義が不足しています。" : "ターゲット定義が不足しています。");
+      }
+      const targets = buildTargets(volume.metadata, targetDefinitions, readTargetOverrides()[datasetId]);
       const order = this.els.allocation.value === "B" ? ["proposal", "mpr"] : ["mpr", "proposal"];
       this.session = {
         study_id: config.study_id,
@@ -116,22 +276,23 @@ export class ValidationController {
         participant_id: participantId,
         session_id: `${participantId}-${Date.now()}`,
         allocation_group: this.els.allocation.value,
+        practice_mode: this.isPractice,
         started_at: new Date().toISOString(),
         status: "in_progress",
         trials: order.map((condition, index) => ({
           trial_id: `${participantId}-${index + 1}`,
           sequence_no: index + 1,
           condition,
-          target_id: targets[index].target_id,
-          target_xyz_mm: targets[index].xyz,
-          practice_flag: false,
+          target_id: (targets[index] ?? targets[0]).target_id,
+          target_xyz_mm: (targets[index] ?? targets[0]).xyz,
+          practice_flag: this.isPractice,
           status: "ready",
         })),
         events: [],
       };
       this.log("session_started", { allocation_group: this.session.allocation_group });
       this.persist();
-      this.els.participantBadge.textContent = participantId;
+      this.els.participantBadge.textContent = this.isPractice ? "練習" : participantId;
       this.trialIndex = -1;
       this.nextTrial();
     } catch (error) {
@@ -148,7 +309,7 @@ export class ValidationController {
       return;
     }
     const trial = this.currentTrial();
-    this.els.title.textContent = "位置対応理解課題";
+    this.els.title.textContent = this.isPractice ? "操作練習" : "位置対応理解課題";
     trial.status = "observing";
     trial.observation_started_at = new Date().toISOString();
     trial.operation_count = 0;
@@ -157,7 +318,7 @@ export class ValidationController {
     this.getScene().clearValidationMarkers();
     this.getScene().showValidationTarget(trial.target_xyz_mm);
     this.showOnly("task");
-    this.els.stepBadge.textContent = `TRIAL ${trial.sequence_no} / 2`;
+    this.els.stepBadge.textContent = `${this.isPractice ? "PRACTICE" : "TRIAL"} ${trial.sequence_no} / ${this.session.trials.length}`;
     this.els.condition.textContent = trial.condition === "mpr" ? "MPR条件" : "提案ビューア条件";
     this.els.instructionText.textContent = "表示されたターゲット位置を観察してください";
     this.els.responsePanel.hidden = true;
@@ -220,13 +381,14 @@ export class ValidationController {
     this.els.responsePanel.hidden = false;
     this.initializeAnswerGizmo();
     this.responseStartedAt = performance.now();
-    this.attachPicking();
+    this.attachPicking("answer");
     this.log("response_started", { trial_id: trial.trial_id });
     this.persist();
   }
 
-  attachPicking() {
+  attachPicking(purpose = "answer") {
     const canvas = this.getScene()?.renderer?.domElement;
+    this.pickingPurpose = purpose;
     if (!canvas || this.pickHandlers) return;
     let draggingGizmo = false;
     const down = (event) => {
@@ -249,28 +411,47 @@ export class ValidationController {
         if (canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
         const point = this.getScene().endValidationMarkerDrag();
         if (point) {
-          const trial = this.currentTrial();
-          this.answerDicom = this.getMapper().threePointToDicom(point);
-          trial.reposition_count = (trial.reposition_count ?? 0) + 1;
-          this.els.instructionText.textContent = "X・Y・Z軸で調整し、回答を確定してください";
-          this.log("answer_gizmo_moved", { reposition_count: trial.reposition_count });
+          const dicomPoint = this.getMapper().threePointToDicom(point);
+          if (this.pickingPurpose === "target") {
+            this.targetDraftDicom = dicomPoint;
+            this.updateTargetReadout();
+            this.els.targetStatus.textContent = "座標を編集中です。「この座標を保存」で確定してください。";
+          } else {
+            const trial = this.currentTrial();
+            this.answerDicom = dicomPoint;
+            trial.reposition_count = (trial.reposition_count ?? 0) + 1;
+            this.els.instructionText.textContent = "X・Y・Z軸で調整し、回答を確定してください";
+            this.log("answer_gizmo_moved", { reposition_count: trial.reposition_count });
+          }
         }
         return;
       }
       if (!this.pointerStart || Math.hypot(event.clientX - this.pointerStart[0], event.clientY - this.pointerStart[1]) > 5) return;
       const point = this.getScene().pickModelPoint(event.clientX, event.clientY);
       if (!point) {
-        this.els.instructionText.textContent = "モデル表面を選択してください";
-        this.log("invalid_pick", {});
+        if (this.pickingPurpose === "target") {
+          this.els.targetStatus.textContent = "モデル表面またはXYZギズモを選択してください。";
+        } else {
+          this.els.instructionText.textContent = "モデル表面を選択してください";
+          this.log("invalid_pick", {});
+        }
         return;
       }
-      const trial = this.currentTrial();
-      if (this.answerDicom) trial.reposition_count = (trial.reposition_count ?? 0) + 1;
-      this.answerDicom = this.getMapper().threePointToDicom(point);
-      this.getScene().showValidationAnswer(this.answerDicom);
-      this.els.confirmAnswer.disabled = false;
-      this.els.instructionText.textContent = "X・Y・Z軸で位置を調整できます";
-      this.log("answer_placed", { reposition_count: trial.reposition_count ?? 0 });
+      const dicomPoint = this.getMapper().threePointToDicom(point);
+      if (this.pickingPurpose === "target") {
+        this.targetDraftDicom = dicomPoint;
+        this.getScene().showValidationAnswer(this.targetDraftDicom);
+        this.updateTargetReadout();
+        this.els.targetStatus.textContent = "モデル表面へ移動しました。XYZギズモで奥行きを調整できます。";
+      } else {
+        const trial = this.currentTrial();
+        if (this.answerDicom) trial.reposition_count = (trial.reposition_count ?? 0) + 1;
+        this.answerDicom = dicomPoint;
+        this.getScene().showValidationAnswer(this.answerDicom);
+        this.els.confirmAnswer.disabled = false;
+        this.els.instructionText.textContent = "X・Y・Z軸で位置を調整できます";
+        this.log("answer_placed", { reposition_count: trial.reposition_count ?? 0 });
+      }
     };
     const cancel = (event) => {
       if (!draggingGizmo) return;
@@ -294,6 +475,7 @@ export class ValidationController {
     canvas.removeEventListener("pointercancel", cancel);
     this.getScene()?.endValidationMarkerDrag();
     this.pickHandlers = null;
+    this.pickingPurpose = null;
   }
 
   resetAnswer() {
@@ -344,15 +526,30 @@ export class ValidationController {
     this.persist();
     this.els.shell.classList.remove("is-viewer-stage");
     this.els.shell.classList.remove("is-response-stage");
-    this.els.title.textContent = "検証完了";
+    this.els.title.textContent = this.isPractice ? "練習完了" : "検証完了";
+    this.els.completeTitle.textContent = this.isPractice ? "練習が完了しました" : "検証が完了しました";
     this.showOnly("complete");
-    this.els.stepBadge.textContent = "COMPLETED";
+    this.els.stepBadge.textContent = this.isPractice ? "PRACTICE DONE" : "COMPLETED";
+    this.els.completeText.textContent = this.isPractice
+      ? "練習は完了です。結果は保存されていません。通常モードへ戻って本番を開始できます。"
+      : "結果は参加者画面には表示されません。研究担当者がCSVまたはJSONとして保存してください。";
+    this.els.csv.hidden = this.isPractice;
+    this.els.json.hidden = this.isPractice;
   }
 
   showOnly(name) {
     this.els.setup.hidden = name !== "setup";
     this.els.task.hidden = name !== "task";
+    this.els.targetEditor.hidden = name !== "targetEditor";
     this.els.complete.hidden = name !== "complete";
+  }
+
+  async loadConfig() {
+    if (this.config) return this.config;
+    const response = await fetch("./data/validation/study-config.phase1.json");
+    if (!response.ok) throw new Error("研究設定を読み込めませんでした。");
+    this.config = await response.json();
+    return this.config;
   }
 
   currentTrial() {
@@ -370,6 +567,7 @@ export class ValidationController {
   }
 
   persist() {
+    if (this.isPractice || !this.session) return;
     const sessions = readSessions();
     const index = sessions.findIndex((item) => item.session_id === this.session.session_id);
     if (index >= 0) sessions[index] = this.session;
@@ -389,16 +587,21 @@ export class ValidationController {
   }
 }
 
-function buildTargets(metadata, definitions) {
+export function buildTargets(metadata, definitions, overrides = {}) {
   const [width, height, depth] = metadata.dimensions;
-  return definitions.map((definition) => ({
-    target_id: definition.target_id,
-    xyz: voxelToDicom(metadata, [
-      (width - 1) * definition.voxel_fraction[0],
-      (height - 1) * definition.voxel_fraction[1],
-      (depth - 1) * definition.voxel_fraction[2],
-    ]),
-  }));
+  return definitions.map((definition) => {
+    const override = overrides?.[definition.target_id];
+    return {
+      target_id: definition.target_id,
+      xyz: isPoint3(override)
+        ? override.map(Number)
+        : voxelToDicom(metadata, [
+          (width - 1) * definition.voxel_fraction[0],
+          (height - 1) * definition.voxel_fraction[1],
+          (depth - 1) * definition.voxel_fraction[2],
+        ]),
+    };
+  });
 }
 
 function voxelToDicom(metadata, voxel) {
@@ -508,6 +711,19 @@ function readSessions() {
   } catch {
     return [];
   }
+}
+
+function readTargetOverrides() {
+  try {
+    const value = JSON.parse(localStorage.getItem(TARGETS_KEY) || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+function isPoint3(value) {
+  return Array.isArray(value) && value.length === 3 && value.every((item) => Number.isFinite(Number(item)));
 }
 
 function csvCell(value) {

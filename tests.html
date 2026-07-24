@@ -20,7 +20,7 @@
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
       import { ThreeSceneManager, calculateRequiredCameraFar, calculateRequiredCameraNear, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=double-sided-depth";
       import { dot, length } from "./src/math3d.js";
-      import { calculateSliceOffsetRange, calculateValidationError } from "./src/validation/ValidationController.js?v=gizmo-2";
+      import { buildTargets, calculateSliceOffsetRange, calculateValidationError } from "./src/validation/ValidationController.js?v=practice-target-1";
 
       const lines = [];
       function assert(name, condition, details = "") {
@@ -54,6 +54,8 @@
       assert("UT-003 voxel center span", volumeVoxelCenterSpan(metadata).every((v, i) => close(v, [6, 9, 12][i])));
       const sliceRange = calculateSliceOffsetRange(metadata, [14, 26, 38], [1, 0, 0]);
       assert("UT-303 validation slice range", close(sliceRange.min, -4) && close(sliceRange.max, 2));
+      const overriddenTarget = buildTargets(metadata, [{ target_id: "target-1", voxel_fraction: [0.5, 0.5, 0.5] }], { "target-1": [1, 2, 3] })[0];
+      assert("UT-304 validation target override", overriddenTarget.xyz.every((value, index) => close(value, [1, 2, 3][index])));
 
       const data = new Int16Array(8);
       for (let i = 0; i < data.length; i += 1) data[i] = i;

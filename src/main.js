@@ -12,7 +12,7 @@ import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController, constrainDicomInputToPlane } from "./three/DynamicMprController.js?v=fixed-mpr-plane-2";
 import { MprUpdateScheduler } from "./three/MprUpdateScheduler.js";
-import { ValidationController } from "./validation/ValidationController.js?v=gizmo-2";
+import { ValidationController } from "./validation/ValidationController.js?v=practice-target-1";
 
 const logger = new ValidationLogger();
 const loader = new DicomLoader(logger);
@@ -263,14 +263,20 @@ for (const input of document.querySelectorAll("input, select")) {
 const validationController = new ValidationController({
   elements: {
     entry: els.validationModeBtn,
+    practiceEntry: document.querySelector("#validationPracticeBtn"),
+    targetEntry: document.querySelector("#validationTargetSetupBtn"),
     shell: document.querySelector("#validationShell"),
     title: document.querySelector("#validationTitle"),
     participantBadge: document.querySelector("#validationParticipantBadge"),
     stepBadge: document.querySelector("#validationStepBadge"),
     setup: document.querySelector("#validationSetup"),
+    setupDescription: document.querySelector("#validationSetupDescription"),
     task: document.querySelector("#validationTask"),
+    targetEditor: document.querySelector("#validationTargetEditor"),
     complete: document.querySelector("#validationComplete"),
     form: document.querySelector("#validationSetupForm"),
+    start: document.querySelector("#validationStartBtn"),
+    participantField: document.querySelector("#validationParticipantField"),
     participant: document.querySelector("#validationParticipantId"),
     dataset: document.querySelector("#validationDataset"),
     allocation: document.querySelector("#validationAllocation"),
@@ -295,6 +301,18 @@ const validationController = new ValidationController({
     csv: document.querySelector("#validationCsvBtn"),
     json: document.querySelector("#validationJsonBtn"),
     finish: document.querySelector("#validationFinishBtn"),
+    completeTitle: document.querySelector("#validationCompleteTitle"),
+    completeText: document.querySelector("#validationCompleteText"),
+    targetDataset: document.querySelector("#validationTargetDataset"),
+    targetSlot: document.querySelector("#validationTargetSlot"),
+    targetX: document.querySelector("#validationTargetX"),
+    targetY: document.querySelector("#validationTargetY"),
+    targetZ: document.querySelector("#validationTargetZ"),
+    targetStatus: document.querySelector("#validationTargetStatus"),
+    targetReset: document.querySelector("#validationTargetResetBtn"),
+    targetSave: document.querySelector("#validationTargetSaveBtn"),
+    targetExport: document.querySelector("#validationTargetExportBtn"),
+    targetClose: document.querySelector("#validationTargetCloseBtn"),
   },
   getVolume: () => state.volume,
   getScene: () => state.threeScene,

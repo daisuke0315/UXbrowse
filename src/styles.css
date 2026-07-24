@@ -1178,6 +1178,16 @@ pre {
   font-weight: 700;
 }
 
+.mode-entry-button + .mode-entry-button {
+  margin-top: 8px;
+}
+
+.mode-entry-button.secondary {
+  border-color: rgb(126 231 239 / 0.2);
+  background: transparent;
+  color: #bcd3d9;
+}
+
 .validation-settings-entry .control-hint {
   margin: 0 0 12px;
 }
@@ -1348,7 +1358,8 @@ body.validation-active .controls-pane {
 .validation-shell.is-viewer-stage .validation-header,
 .validation-shell.is-viewer-stage .validation-instruction,
 .validation-shell.is-viewer-stage .validation-response-panel,
-.validation-shell.is-viewer-stage .validation-skip-button {
+.validation-shell.is-viewer-stage .validation-skip-button,
+.validation-shell.is-viewer-stage .validation-target-panel {
   pointer-events: auto;
 }
 
@@ -1474,6 +1485,74 @@ body.validation-active .controls-pane {
 
 .validation-complete {
   text-align: center;
+}
+
+.validation-target-editor {
+  position: relative;
+  min-height: 0;
+}
+
+.validation-target-panel {
+  position: fixed;
+  z-index: 82;
+  top: 88px;
+  right: 20px;
+  display: grid;
+  gap: 12px;
+  width: min(420px, calc(100% - 40px));
+  max-height: calc(100vh - 108px);
+  padding: 20px;
+  overflow: auto;
+  border: 1px solid rgb(126 231 239 / 0.28);
+  border-radius: 18px;
+  background: rgb(7 18 24 / 0.95);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.42);
+}
+
+.validation-target-panel h2,
+.validation-target-panel p {
+  margin: 0;
+}
+
+.validation-target-panel > label {
+  display: grid;
+  gap: 7px;
+  color: #bcd3d9;
+  font-size: 12px;
+}
+
+.validation-target-panel select {
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 1px solid rgb(126 231 239 / 0.22);
+  border-radius: 10px;
+  background: #09151b;
+  color: #effcfd;
+}
+
+.validation-coordinate-readout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.validation-coordinate-readout span {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid rgb(126 231 239 / 0.16);
+  border-radius: 10px;
+  color: #7ee7ef;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.validation-coordinate-readout output {
+  overflow: hidden;
+  color: #effcfd;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 800px) {

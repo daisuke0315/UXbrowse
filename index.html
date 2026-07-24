@@ -78,6 +78,8 @@
               <legend>研究用モード</legend>
               <p class="control-hint">MPR条件と提案ビューア条件の位置対応理解を比較します。</p>
               <button id="validationModeBtn" class="mode-entry-button" type="button">検証モードを開始</button>
+              <button id="validationPracticeBtn" class="mode-entry-button secondary" type="button">練習モードを開始</button>
+              <button id="validationTargetSetupBtn" class="mode-entry-button secondary" type="button">正解座標を設定</button>
             </fieldset>
           </details>
 
@@ -383,10 +385,10 @@
           <div>
             <span class="validation-section-number">01</span>
             <h2>MPRと提案ビューアの比較検証</h2>
-            <p>氏名は入力せず、研究用IDのみを使用します。2条件の観察後、可視光モデル上で記憶した位置を回答します。</p>
+            <p id="validationSetupDescription">氏名は入力せず、研究用IDのみを使用します。2条件の観察後、可視光モデル上で記憶した位置を回答します。</p>
           </div>
           <form id="validationSetupForm" class="validation-form">
-            <label>研究用ID
+            <label id="validationParticipantField">研究用ID
               <input id="validationParticipantId" type="text" required maxlength="64" autocomplete="off" placeholder="例：P001">
             </label>
             <label>データセット
@@ -404,7 +406,7 @@
             <p id="validationSetupStatus" class="validation-note">開始時にデータと座標系を確認します。</p>
             <div class="validation-actions">
               <button id="validationCancelBtn" class="secondary" type="button">通常モードへ戻る</button>
-              <button type="submit">検証を開始</button>
+              <button id="validationStartBtn" type="submit">検証を開始</button>
             </div>
           </form>
         </section>
@@ -447,10 +449,39 @@
           <button id="validationEndObservationBtn" class="validation-skip-button" type="button">観察を終了して回答へ</button>
         </section>
 
+        <section id="validationTargetEditor" class="validation-target-editor" hidden>
+          <div class="validation-target-panel">
+            <span class="validation-section-number">TARGET SETUP</span>
+            <h2>正解座標を設定</h2>
+            <p>CTと可視光モデルを確認し、XYZギズモまたはモデル表面のクリックで正解点を指定します。</p>
+            <label>データセット
+              <select id="validationTargetDataset">
+                <option value="mikan">みかん</option>
+                <option value="banana">バナナ</option>
+              </select>
+            </label>
+            <label>設定する座標
+              <select id="validationTargetSlot"></select>
+            </label>
+            <div class="validation-coordinate-readout" aria-label="正解座標">
+              <span>X <output id="validationTargetX">-</output></span>
+              <span>Y <output id="validationTargetY">-</output></span>
+              <span>Z <output id="validationTargetZ">-</output></span>
+            </div>
+            <p id="validationTargetStatus" class="validation-note">データを読み込んでいます...</p>
+            <div class="validation-actions">
+              <button id="validationTargetResetBtn" class="secondary" type="button">設定前に戻す</button>
+              <button id="validationTargetSaveBtn" type="button">この座標を保存</button>
+              <button id="validationTargetExportBtn" class="secondary" type="button">設定JSONを保存</button>
+              <button id="validationTargetCloseBtn" class="secondary" type="button">終了</button>
+            </div>
+          </div>
+        </section>
+
         <section id="validationComplete" class="validation-card validation-complete" hidden>
           <span class="validation-section-number">DONE</span>
-          <h2>検証が完了しました</h2>
-          <p>結果は参加者画面には表示されません。研究担当者がCSVまたはJSONとして保存してください。</p>
+          <h2 id="validationCompleteTitle">検証が完了しました</h2>
+          <p id="validationCompleteText">結果は参加者画面には表示されません。研究担当者がCSVまたはJSONとして保存してください。</p>
           <div class="validation-actions">
             <button id="validationCsvBtn" type="button">CSVを保存</button>
             <button id="validationJsonBtn" class="secondary" type="button">JSONを保存</button>
@@ -476,6 +507,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=validation-gizmo-3"></script>
+    <script type="module" src="./src/main.js?v=validation-practice-target-1"></script>
   </body>
 </html>
