@@ -18,7 +18,7 @@
       import { WindowingProcessor } from "./src/WindowingProcessor.js";
       import { volumeCenter, volumeVoxelCenterSpan } from "./src/VolumeGeometry.js";
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
-      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=proposal-target-attached-1";
+      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, isMprPlaneRenderable, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=proposal-target-decal-3";
       import { dot, length } from "./src/math3d.js";
       import { buildTargets, calculateSliceOffsetRange, calculateSphereSectionRadius, calculateValidationError, projectPointToMprPixel } from "./src/validation/ValidationController.js?v=mpr-sphere-section-1";
 
@@ -120,6 +120,9 @@
           && attachedPose.camera.map((value, index) => value - attachedPose.target[index])
             .every((value, index) => close(value, [9, 18, 27][index])),
       );
+      assert("UT-133 attached target follows visible MPR", isMprPlaneRenderable({ visible: true, opacity: 1 }));
+      assert("UT-134 attached target hides with MPR", !isMprPlaneRenderable({ visible: false, opacity: 1 }) && !isMprPlaneRenderable({ visible: true, opacity: 0 }));
+      assert("UT-135 attached target hides on transparent MPR pixel", !isMprPlaneRenderable({ visible: true, opacity: 1, thresholdAlpha: { centerAlpha: 0 } }));
       const validationPlane = {
         visible: true,
         centerThree: [0, 0, 0],

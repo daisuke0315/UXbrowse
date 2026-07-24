@@ -1,6 +1,6 @@
 import { volumeCenter, volumeDisplaySpan, volumeVoxelCenterSpan } from "../VolumeGeometry.js";
 import { ModelVisibilityShaderController } from "./ModelVisibilityShaderController.js?v=locked-foreground-side-1";
-import { MprPlaneOverlay } from "./MprPlaneOverlay.js?v=overlay-preview-2";
+import { MprPlaneOverlay } from "./MprPlaneOverlay.js?v=proposal-target-decal-1";
 import { WeightedBlendedOitRenderer } from "./WeightedBlendedOitRenderer.js?v=locked-foreground-side-1";
 
 export class ThreeSceneManager {
@@ -569,16 +569,63 @@ export class ThreeSceneManager {
 
   attachValidationTargetToMpr() {
     if (!this.validationTargetMarker || !this.camera || !this.controls) return;
+    const targetWorld = this.validationTargetMarker.position.clone();
     const pose = calculateFocusAlignedCameraPose(
       this.camera.position.toArray(),
       this.controls.target.toArray(),
-      this.validationTargetMarker.position.toArray(),
+      targetWorld.toArray(),
     );
     this.camera.position.set(...pose.camera);
     this.controls.target.set(...pose.target);
+    const radius = Math.max(6, this.validationTargetMarker.userData.validationRadius ?? 5);
+    this.validationTargetMarker.userData.validationRadius = radius;
+    this.validationTargetMarker.geometry.dispose();
+    this.validationTargetMarker.material.dispose();
+    this.validationTargetMarker.geometry = new this.THREE.CircleGeometry(radius, 36);
+    this.validationTargetMarker.material = new this.THREE.MeshBasicMaterial({
+      color: 0x3cff8f,
+      transparent: true,
+      opacity: 1,
+      depthTest: false,
+      depthWrite: false,
+      side: this.THREE.DoubleSide,
+      toneMapped: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    this.validationTargetMarker.name = "validation-target-mpr-disc";
+    this.validationTargetMarker.userData.attachedToMpr = true;
+    this.validationTargetMarker.userData.validationSourcePosition = targetWorld.toArray();
+    this.validationTargetMarker.renderOrder = 10;
     this.camera.updateMatrixWorld();
     this.controls.update();
+    this.syncValidationTargetToMprPlane();
     this.requestRender();
+  }
+
+  syncValidationTargetToMprPlane(planeInfo = this.mprPlaneOverlay?.getPlaneInfo?.()) {
+    const marker = this.validationTargetMarker;
+    if (!marker?.userData?.attachedToMpr) return;
+    if (!isMprPlaneRenderable(planeInfo) || !this.mprPlaneOverlay?.mesh) {
+      marker.visible = false;
+      return;
+    }
+    const sourcePosition = new this.THREE.Vector3(...marker.userData.validationSourcePosition);
+    const sourceCenter = new this.THREE.Vector3(...planeInfo.sourceCenterThree);
+    const sourceU = new this.THREE.Vector3(...planeInfo.sourceUThree);
+    const sourceV = new this.THREE.Vector3(...planeInfo.sourceVThree);
+    const relative = sourcePosition.sub(sourceCenter);
+    const displayScale = planeInfo.cameraPlaneScale ?? 1;
+    if (marker.parent !== this.mprPlaneOverlay.mesh) this.mprPlaneOverlay.mesh.add(marker);
+    marker.position.set(
+      relative.dot(sourceU) * displayScale,
+      relative.dot(sourceV) * displayScale,
+      -Math.max(0.02, (marker.userData.validationRadius ?? 5) * 0.01),
+    );
+    marker.quaternion.identity();
+    marker.visible = true;
+    marker.updateMatrixWorld(true);
   }
 
   getValidationTargetRadiusDicom() {
@@ -1104,6 +1151,7 @@ export class ThreeSceneManager {
         heightMm: planeInfo.heightMm,
       });
     }
+    this.syncValidationTargetToMprPlane(planeInfo);
     this.updateForegroundTransparency(options);
     this.requestRender();
     return planeInfo;
@@ -1118,6 +1166,7 @@ export class ThreeSceneManager {
       return this.mprPlaneOverlay?.getPlaneInfo?.() ?? null;
     }
     this.mprPlaneOverlay?.setOptions(options);
+    this.syncValidationTargetToMprPlane();
     this.updateForegroundTransparency(options);
     this.requestRender();
     return this.mprPlaneOverlay?.getPlaneInfo?.() ?? null;
@@ -1350,9 +1399,14 @@ export class ThreeSceneManager {
   updateValidationTargetPlaneOcclusion() {
     if (!this.validationTargetMarker || !this.camera) return;
     const planeInfo = this.mprPlaneOverlay?.getPlaneInfo?.();
+    if (this.validationTargetMarker.userData.attachedToMpr) {
+      this.syncValidationTargetToMprPlane(planeInfo);
+      this.validationTargetMarker.visible = isMprPlaneRenderable(planeInfo);
+      return;
+    }
     const planeIsInFront = isPointBehindDisplayPlane(
       this.camera.position.toArray(),
-      this.validationTargetMarker.position.toArray(),
+      this.getValidationTargetWorldPosition(),
       planeInfo,
     );
     const modelIsInFront = this.isModelInFrontOfValidationTarget();
@@ -1364,7 +1418,8 @@ export class ThreeSceneManager {
 
   isModelInFrontOfValidationTarget() {
     if (!this.objModel || !this.validationTargetMarker || !this.camera) return false;
-    const direction = this.validationTargetMarker.position.clone().sub(this.camera.position);
+    const markerPosition = new this.THREE.Vector3(...this.getValidationTargetWorldPosition());
+    const direction = markerPosition.clone().sub(this.camera.position);
     const targetDistance = direction.length();
     const radius = this.validationTargetMarker.userData.validationRadius ?? 0;
     if (targetDistance <= Math.max(1e-4, radius)) return false;
@@ -1382,6 +1437,12 @@ export class ThreeSceneManager {
     return raycaster
       .intersectObject(this.objModel, true)
       .some((intersection) => !this.isModelPointTransparentAtMpr(intersection.point));
+  }
+
+  getValidationTargetWorldPosition() {
+    if (!this.validationTargetMarker) return [0, 0, 0];
+    this.validationTargetMarker.updateMatrixWorld(true);
+    return this.validationTargetMarker.getWorldPosition(new this.THREE.Vector3()).toArray();
   }
 
   isModelPointTransparentAtMpr(point) {
@@ -1526,6 +1587,13 @@ export function calculateFocusAlignedCameraPose(cameraPosition, currentTarget, n
     camera: cameraPosition.map((value, index) => value + delta[index]),
     target: [...nextTarget],
   };
+}
+
+export function isMprPlaneRenderable(planeInfo) {
+  const centerAlpha = planeInfo?.thresholdAlpha?.centerAlpha;
+  return planeInfo?.visible === true
+    && Number(planeInfo.opacity) > 0.01
+    && (centerAlpha === undefined || Number(centerAlpha) > 0);
 }
 
 export function calculateRequiredCameraFar(cameraPosition, contentCenter, contentRadius, minimumFar = 5000, padding = 1.1) {
