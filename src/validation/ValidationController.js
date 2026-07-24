@@ -344,7 +344,9 @@ export class ValidationController {
     this.answerDicom = null;
     this.getScene().setValidationResponseMode(false);
     this.getScene().clearValidationMarkers();
-    this.getScene().showValidationTarget(trial.target_xyz_mm);
+    this.getScene().showValidationTarget(trial.target_xyz_mm, {
+      attachToMpr: trial.condition === "proposal",
+    });
     this.showOnly("task");
     this.els.stepBadge.textContent = `${this.isPractice ? "PRACTICE" : "TRIAL"} ${trial.sequence_no} / ${this.session.trials.length}`;
     this.els.condition.textContent = trial.condition === "mpr" ? "MPR条件" : "提案ビューア条件";

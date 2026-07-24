@@ -557,13 +557,28 @@ export class ThreeSceneManager {
     return hit ? hit.point.toArray() : null;
   }
 
-  showValidationTarget(dicomPoint) {
+  showValidationTarget(dicomPoint, { attachToMpr = false } = {}) {
     this.clearValidationTarget();
     this.validationTargetMarker = this.createValidationSphereMarker(dicomPoint, 0x62f0a7, {
       opacity: 1,
       depthTest: true,
       name: "validation-target-sphere",
     });
+    if (attachToMpr) this.attachValidationTargetToMpr();
+  }
+
+  attachValidationTargetToMpr() {
+    if (!this.validationTargetMarker || !this.camera || !this.controls) return;
+    const pose = calculateFocusAlignedCameraPose(
+      this.camera.position.toArray(),
+      this.controls.target.toArray(),
+      this.validationTargetMarker.position.toArray(),
+    );
+    this.camera.position.set(...pose.camera);
+    this.controls.target.set(...pose.target);
+    this.camera.updateMatrixWorld();
+    this.controls.update();
+    this.requestRender();
   }
 
   getValidationTargetRadiusDicom() {
@@ -1503,6 +1518,14 @@ export function resolveLocalGltfResource(files, modelFile, requestedUrl) {
   if (exact) return exact.file;
   const expectedLower = expectedPath.toLowerCase();
   return normalizedFiles.find((entry) => entry.path.toLowerCase() === expectedLower)?.file ?? null;
+}
+
+export function calculateFocusAlignedCameraPose(cameraPosition, currentTarget, nextTarget) {
+  const delta = nextTarget.map((value, index) => value - currentTarget[index]);
+  return {
+    camera: cameraPosition.map((value, index) => value + delta[index]),
+    target: [...nextTarget],
+  };
 }
 
 export function calculateRequiredCameraFar(cameraPosition, contentCenter, contentRadius, minimumFar = 5000, padding = 1.1) {

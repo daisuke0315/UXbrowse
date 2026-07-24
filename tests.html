@@ -18,7 +18,7 @@
       import { WindowingProcessor } from "./src/WindowingProcessor.js";
       import { volumeCenter, volumeVoxelCenterSpan } from "./src/VolumeGeometry.js";
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
-      import { ThreeSceneManager, calculateRequiredCameraFar, calculateRequiredCameraNear, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=validation-marker-plane-depth";
+      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=proposal-target-attached-1";
       import { dot, length } from "./src/math3d.js";
       import { buildTargets, calculateSliceOffsetRange, calculateSphereSectionRadius, calculateValidationError, projectPointToMprPixel } from "./src/validation/ValidationController.js?v=mpr-sphere-section-1";
 
@@ -112,6 +112,14 @@
       assert("UT-124 camera far follows distance", close(calculateRequiredCameraFar([0, 0, -6000], [0, 0, 0], 1000), 7700));
       assert("UT-125 camera near follows empty space", close(calculateRequiredCameraNear([0, 0, -6000], [0, 0, 0], 1000), 1250));
       assert("UT-126 camera near protects MPR", close(calculateRequiredCameraNear([0, 0, -6000], [0, 0, 0], 1000, 0.1, 1500), 375));
+      const attachedPose = calculateFocusAlignedCameraPose([10, 20, 30], [1, 2, 3], [4, 8, 12]);
+      assert(
+        "UT-132 proposal target focus preserves view vector",
+        attachedPose.camera.every((value, index) => close(value, [13, 26, 39][index]))
+          && attachedPose.target.every((value, index) => close(value, [4, 8, 12][index]))
+          && attachedPose.camera.map((value, index) => value - attachedPose.target[index])
+            .every((value, index) => close(value, [9, 18, 27][index])),
+      );
       const validationPlane = {
         visible: true,
         centerThree: [0, 0, 0],
