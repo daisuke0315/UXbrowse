@@ -12,7 +12,7 @@ import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController, constrainDicomInputToPlane } from "./three/DynamicMprController.js?v=fixed-mpr-plane-2";
 import { MprUpdateScheduler } from "./three/MprUpdateScheduler.js";
-import { ValidationController } from "./validation/ValidationController.js?v=transparent-target-1";
+import { ValidationController } from "./validation/ValidationController.js?v=mpr-zoom-1";
 
 const logger = new ValidationLogger();
 const loader = new DicomLoader(logger);
@@ -288,12 +288,18 @@ const validationController = new ValidationController({
     sagittal: document.querySelector("#validationSagittal"),
     sagittalOffset: document.querySelector("#validationSagittalOffset"),
     sagittalOffsetValue: document.querySelector("#validationSagittalOffsetValue"),
+    sagittalZoom: document.querySelector("#validationSagittalZoom"),
+    sagittalZoomValue: document.querySelector("#validationSagittalZoomValue"),
     coronal: document.querySelector("#validationCoronal"),
     coronalOffset: document.querySelector("#validationCoronalOffset"),
     coronalOffsetValue: document.querySelector("#validationCoronalOffsetValue"),
+    coronalZoom: document.querySelector("#validationCoronalZoom"),
+    coronalZoomValue: document.querySelector("#validationCoronalZoomValue"),
     axial: document.querySelector("#validationAxial"),
     axialOffset: document.querySelector("#validationAxialOffset"),
     axialOffsetValue: document.querySelector("#validationAxialOffsetValue"),
+    axialZoom: document.querySelector("#validationAxialZoom"),
+    axialZoomValue: document.querySelector("#validationAxialZoomValue"),
     responsePanel: document.querySelector("#validationResponsePanel"),
     resetAnswer: document.querySelector("#validationResetAnswerBtn"),
     confirmAnswer: document.querySelector("#validationConfirmAnswerBtn"),

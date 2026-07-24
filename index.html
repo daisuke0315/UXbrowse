@@ -416,23 +416,41 @@
             <figure>
               <figcaption><span>SAGITTAL</span><output id="validationSagittalOffsetValue">基準断面</output></figcaption>
               <canvas id="validationSagittal" width="384" height="384"></canvas>
-              <label class="validation-slice-control">断面位置
-                <input id="validationSagittalOffset" type="range" min="-100" max="100" step="1" value="0">
-              </label>
+              <div class="validation-mpr-plane-controls">
+                <label class="validation-slice-control">断面位置
+                  <input id="validationSagittalOffset" type="range" min="-100" max="100" step="1" value="0">
+                </label>
+                <label class="validation-zoom-control">拡大
+                  <input id="validationSagittalZoom" type="range" min="1" max="4" step="0.1" value="1">
+                  <output id="validationSagittalZoomValue">100%</output>
+                </label>
+              </div>
             </figure>
             <figure>
               <figcaption><span>CORONAL</span><output id="validationCoronalOffsetValue">基準断面</output></figcaption>
               <canvas id="validationCoronal" width="384" height="384"></canvas>
-              <label class="validation-slice-control">断面位置
-                <input id="validationCoronalOffset" type="range" min="-100" max="100" step="1" value="0">
-              </label>
+              <div class="validation-mpr-plane-controls">
+                <label class="validation-slice-control">断面位置
+                  <input id="validationCoronalOffset" type="range" min="-100" max="100" step="1" value="0">
+                </label>
+                <label class="validation-zoom-control">拡大
+                  <input id="validationCoronalZoom" type="range" min="1" max="4" step="0.1" value="1">
+                  <output id="validationCoronalZoomValue">100%</output>
+                </label>
+              </div>
             </figure>
             <figure>
               <figcaption><span>AXIAL</span><output id="validationAxialOffsetValue">基準断面</output></figcaption>
               <canvas id="validationAxial" width="384" height="384"></canvas>
-              <label class="validation-slice-control">断面位置
-                <input id="validationAxialOffset" type="range" min="-100" max="100" step="1" value="0">
-              </label>
+              <div class="validation-mpr-plane-controls">
+                <label class="validation-slice-control">断面位置
+                  <input id="validationAxialOffset" type="range" min="-100" max="100" step="1" value="0">
+                </label>
+                <label class="validation-zoom-control">拡大
+                  <input id="validationAxialZoom" type="range" min="1" max="4" step="0.1" value="1">
+                  <output id="validationAxialZoomValue">100%</output>
+                </label>
+              </div>
             </figure>
           </div>
           <div id="validationInstruction" class="validation-instruction">
@@ -507,6 +525,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=validation-transparent-target-1"></script>
+    <script type="module" src="./src/main.js?v=validation-mpr-zoom-1"></script>
   </body>
 </html>

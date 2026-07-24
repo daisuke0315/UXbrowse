@@ -33,9 +33,21 @@ export class ValidationController {
     this.targetBaseDicom = null;
     this.pickingPurpose = null;
     this.mprDefinitions = [
-      { normal: [1, 0, 0], up: [0, 0, -1], canvas: elements.sagittal, slider: elements.sagittalOffset, output: elements.sagittalOffsetValue },
-      { normal: [0, 1, 0], up: [0, 0, -1], canvas: elements.coronal, slider: elements.coronalOffset, output: elements.coronalOffsetValue },
-      { normal: [0, 0, 1], up: [0, 1, 0], canvas: elements.axial, slider: elements.axialOffset, output: elements.axialOffsetValue },
+      {
+        normal: [1, 0, 0], up: [0, 0, -1], canvas: elements.sagittal,
+        slider: elements.sagittalOffset, output: elements.sagittalOffsetValue,
+        zoom: elements.sagittalZoom, zoomOutput: elements.sagittalZoomValue,
+      },
+      {
+        normal: [0, 1, 0], up: [0, 0, -1], canvas: elements.coronal,
+        slider: elements.coronalOffset, output: elements.coronalOffsetValue,
+        zoom: elements.coronalZoom, zoomOutput: elements.coronalZoomValue,
+      },
+      {
+        normal: [0, 0, 1], up: [0, 1, 0], canvas: elements.axial,
+        slider: elements.axialOffset, output: elements.axialOffsetValue,
+        zoom: elements.axialZoom, zoomOutput: elements.axialZoomValue,
+      },
     ];
     this.installEvents();
   }
@@ -67,10 +79,20 @@ export class ValidationController {
     this.els.targetClose.addEventListener("click", () => this.close());
     for (const definition of this.mprDefinitions) {
       definition.slider.addEventListener("input", () => this.renderMprPlane(definition));
+      definition.zoom.addEventListener("input", () => this.renderMprPlane(definition));
       definition.canvas.addEventListener("wheel", (event) => {
         if (this.els.mprGrid.hidden) return;
         event.preventDefault();
         const direction = event.deltaY > 0 ? 1 : -1;
+        if (event.ctrlKey || event.metaKey) {
+          const zoom = Math.max(
+            Number(definition.zoom.min),
+            Math.min(Number(definition.zoom.max), Number(definition.zoom.value) - direction * 0.1)
+          );
+          definition.zoom.value = zoom.toFixed(1);
+          this.renderMprPlane(definition);
+          return;
+        }
         const next = Math.max(
           Number(definition.slider.min),
           Math.min(Number(definition.slider.max), Number(definition.slider.value) + direction)
@@ -339,6 +361,7 @@ export class ValidationController {
       definition.slider.min = String(Math.ceil(range.min));
       definition.slider.max = String(Math.floor(range.max));
       definition.slider.value = "0";
+      definition.zoom.value = "1";
       this.renderMprPlane(definition);
     }
   }
@@ -347,11 +370,15 @@ export class ValidationController {
     const volume = this.getVolume();
     if (!volume || !this.mprTarget) return;
     const offsetMm = Number(definition.slider.value) || 0;
+    const zoom = Math.max(1, Number(definition.zoom.value) || 1);
     const planeTarget = this.mprTarget.map((value, index) => value + definition.normal[index] * offsetMm);
+    const baseRequest = this.getBaseMprRequest();
     const request = {
-      ...this.getBaseMprRequest(),
+      ...baseRequest,
       width: 384,
       height: 384,
+      spacingU: baseRequest.spacingU / zoom,
+      spacingV: baseRequest.spacingV / zoom,
       target: planeTarget,
       eye: planeTarget.map((value, index) => value - definition.normal[index] * 500),
       up: definition.up,
@@ -362,6 +389,7 @@ export class ValidationController {
     definition.output.textContent = offsetMm === 0
       ? "基準断面"
       : `基準から ${offsetMm > 0 ? "+" : ""}${offsetMm} mm`;
+    definition.zoomOutput.textContent = `${Math.round(zoom * 100)}%`;
   }
 
   beginResponse() {
