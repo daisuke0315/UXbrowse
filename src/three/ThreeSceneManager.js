@@ -559,15 +559,16 @@ export class ThreeSceneManager {
 
   showValidationTarget(dicomPoint) {
     this.clearValidationTarget();
-    this.validationTargetMarker = this.createValidationMarker(dicomPoint, 0x62f0a7, 1.2, {
+    this.validationTargetMarker = this.createValidationSphereMarker(dicomPoint, 0x62f0a7, {
       opacity: 1,
       depthTest: true,
+      name: "validation-target-sphere",
     });
-    this.validationTargetXrayMarker = this.createValidationMarker(dicomPoint, 0x62f0a7, 1.2, {
+    this.validationTargetXrayMarker = this.createValidationSphereMarker(dicomPoint, 0x62f0a7, {
       opacity: 0.32,
       depthTest: false,
       destinationScene: this.validationOverlayScene,
-      name: "validation-target-xray-marker",
+      name: "validation-target-sphere-overlay",
     });
   }
 
@@ -748,6 +749,48 @@ export class ThreeSceneManager {
     destinationScene.add(marker);
     this.requestRender();
     return marker;
+  }
+
+  createValidationSphereMarker(dicomPoint, color, {
+    opacity = 1,
+    depthTest = true,
+    destinationScene = this.scene,
+    name = "validation-sphere-marker",
+  } = {}) {
+    if (!this.mapper || !this.scene) return null;
+    const point = this.mapper.dicomPointToThree(dicomPoint);
+    const radius = this.hasSceneContentBounds
+      ? Math.max(2.8, this.sceneContentSphere.radius * 0.022)
+      : 5;
+    const geometry = new this.THREE.SphereGeometry(radius, 24, 16);
+    const material = depthTest
+      ? new this.THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.32,
+        metalness: 0.06,
+        emissive: new this.THREE.Color(color),
+        emissiveIntensity: 0.7,
+        transparent: false,
+        opacity: 1,
+        depthTest: true,
+        depthWrite: true,
+      })
+      : new this.THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false,
+      });
+    const sphere = new this.THREE.Mesh(geometry, material);
+    sphere.position.set(...point);
+    sphere.renderOrder = 1000;
+    sphere.name = name;
+    sphere.userData.validationRadius = radius;
+    destinationScene.add(sphere);
+    this.requestRender();
+    return sphere;
   }
 
   createValidationGizmo(position) {
@@ -1288,9 +1331,32 @@ export class ThreeSceneManager {
       this.validationTargetMarker.position.toArray(),
       planeInfo,
     );
-    // MPRがマーカーより手前にある場合だけ通常レイヤーを隠し、
-    // 最終描画のx-rayレイヤー（半透明）を見せる。MPRが奥なら不透明表示する。
-    this.validationTargetMarker.visible = !planeIsInFront;
+    const modelIsInFront = this.isModelInFrontOfValidationTarget();
+    const isOccluded = planeIsInFront || modelIsInFront;
+    // 通常時は陰影付きの不透明球だけを表示する。
+    // モデル内部またはMPRの奥に入った場合だけ半透明のx-ray球へ切り替える。
+    this.validationTargetMarker.visible = !isOccluded;
+    if (this.validationTargetXrayMarker) {
+      this.validationTargetXrayMarker.visible = isOccluded;
+      this.validationTargetXrayMarker.material.opacity = 0.42;
+    }
+  }
+
+  isModelInFrontOfValidationTarget() {
+    if (!this.objModel || !this.validationTargetMarker || !this.camera) return false;
+    const direction = this.validationTargetMarker.position.clone().sub(this.camera.position);
+    const targetDistance = direction.length();
+    const radius = this.validationTargetMarker.userData.validationRadius ?? 0;
+    if (targetDistance <= Math.max(1e-4, radius)) return false;
+    direction.normalize();
+    const raycaster = new this.THREE.Raycaster(
+      this.camera.position,
+      direction,
+      0,
+      Math.max(0, targetDistance - radius * 0.65),
+    );
+    this.objModel.updateMatrixWorld(true);
+    return raycaster.intersectObject(this.objModel, true).length > 0;
   }
 
   useInteractivePixelRatio() {
