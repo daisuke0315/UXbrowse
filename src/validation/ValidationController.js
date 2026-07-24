@@ -370,7 +370,7 @@ export class ValidationController {
       definition.slider.min = String(Math.ceil(range.min));
       definition.slider.max = String(Math.floor(range.max));
       definition.slider.value = "0";
-      definition.zoom.value = "1";
+      definition.zoom.value = "2";
     }
     this.renderAllMprPlanes();
   }

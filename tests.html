@@ -18,9 +18,9 @@
       import { WindowingProcessor } from "./src/WindowingProcessor.js";
       import { volumeCenter, volumeVoxelCenterSpan } from "./src/VolumeGeometry.js";
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
-      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, calculateValidationSphereSectionScale, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=proposal-target-symmetric-sphere-2";
+      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, calculateValidationSphereSectionScale, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=validation-target-magenta-1";
       import { dot, length } from "./src/math3d.js";
-      import { buildTargets, calculateSliceOffsetRange, calculateSphereSectionRadius, calculateValidationError, projectPointToMprPixel } from "./src/validation/ValidationController.js?v=mpr-sphere-section-1";
+      import { buildTargets, calculateSliceOffsetRange, calculateSphereSectionRadius, calculateValidationError, projectPointToMprPixel } from "./src/validation/ValidationController.js?v=mpr-default-zoom-200-1";
 
       const lines = [];
       function assert(name, condition, details = "") {

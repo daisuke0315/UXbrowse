@@ -559,7 +559,8 @@ export class ThreeSceneManager {
 
   showValidationTarget(dicomPoint, { attachToMpr = false } = {}) {
     this.clearValidationTarget();
-    this.validationTargetMarker = this.createValidationSphereMarker(dicomPoint, 0x62f0a7, {
+    // グレースケールCTと黄系の可視光モデルの両方に埋もれにくい高彩度マゼンタ。
+    this.validationTargetMarker = this.createValidationSphereMarker(dicomPoint, 0xff4fd8, {
       opacity: 1,
       depthTest: true,
       name: "validation-target-sphere",
