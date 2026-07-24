@@ -40,6 +40,7 @@ export class ThreeSceneManager {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(this.config.background);
+    this.validationOverlayScene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(this.config.fov, 1, this.config.near, 5000);
     this.sceneContentBounds = new THREE.Box3();
     this.sceneContentSphere = new THREE.Sphere();
@@ -558,7 +559,16 @@ export class ThreeSceneManager {
 
   showValidationTarget(dicomPoint) {
     this.clearValidationTarget();
-    this.validationTargetMarker = this.createValidationMarker(dicomPoint, 0x62f0a7, 1.2, { opacity: 0.58 });
+    this.validationTargetMarker = this.createValidationMarker(dicomPoint, 0x62f0a7, 1.2, {
+      opacity: 0.58,
+      depthTest: true,
+    });
+    this.validationTargetXrayMarker = this.createValidationMarker(dicomPoint, 0x62f0a7, 1.2, {
+      opacity: 0.32,
+      depthTest: false,
+      destinationScene: this.validationOverlayScene,
+      name: "validation-target-xray-marker",
+    });
   }
 
   showValidationAnswer(dicomPoint) {
@@ -577,7 +587,12 @@ export class ThreeSceneManager {
     return bounds.getCenter(new this.THREE.Vector3()).toArray();
   }
 
-  createValidationMarker(dicomPoint, color, scale = 1, { opacity = 1 } = {}) {
+  createValidationMarker(dicomPoint, color, scale = 1, {
+    opacity = 1,
+    depthTest = false,
+    destinationScene = this.scene,
+    name = "validation-marker",
+  } = {}) {
     if (!this.mapper || !this.scene) return null;
     const point = this.mapper.dicomPointToThree(dicomPoint);
     const markerCanvas = document.createElement("canvas");
@@ -603,7 +618,7 @@ export class ThreeSceneManager {
       map: texture,
       transparent: true,
       opacity,
-      depthTest: false,
+      depthTest,
       depthWrite: false,
       toneMapped: false,
     }));
@@ -611,8 +626,8 @@ export class ThreeSceneManager {
     marker.scale.set(markerSize, markerSize, 1);
     marker.position.set(...point);
     marker.renderOrder = 1000;
-    marker.name = "validation-marker";
-    this.scene.add(marker);
+    marker.name = name;
+    destinationScene.add(marker);
     this.requestRender();
     return marker;
   }
@@ -802,6 +817,7 @@ export class ThreeSceneManager {
 
   clearValidationTarget() {
     this.disposeValidationMarker("validationTargetMarker");
+    this.disposeValidationMarker("validationTargetXrayMarker");
   }
 
   clearValidationAnswer() {
@@ -827,7 +843,7 @@ export class ThreeSceneManager {
   disposeValidationMarker(property) {
     const marker = this[property];
     if (!marker) return;
-    this.scene.remove(marker);
+    marker.parent?.remove(marker);
     marker.geometry?.dispose?.();
     marker.material.map?.dispose?.();
     marker.material.dispose();
@@ -1109,6 +1125,7 @@ export class ThreeSceneManager {
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+    this.renderValidationOverlay();
     this.renderCount += 1;
     this.renderer.domElement.dataset.renderCount = String(this.renderCount);
     // TrackballControlsはpointermove自体では再描画を要求しない。
@@ -1118,6 +1135,17 @@ export class ThreeSceneManager {
       this.inertiaFramesRemaining -= 1;
     }
     if (this.controlsInteracting || this.inertiaFramesRemaining > 0) this.requestRender();
+  }
+
+  renderValidationOverlay() {
+    if (!this.validationOverlayScene?.children.length) return;
+    const originalAutoClear = this.renderer.autoClear;
+    this.renderer.autoClear = false;
+    try {
+      this.renderer.render(this.validationOverlayScene, this.camera);
+    } finally {
+      this.renderer.autoClear = originalAutoClear;
+    }
   }
 
   useInteractivePixelRatio() {
