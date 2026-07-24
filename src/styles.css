@@ -1505,6 +1505,36 @@ body.validation-active .controls-pane {
   text-align: center;
 }
 
+.validation-shell.is-result-stage .validation-header,
+.validation-shell.is-result-stage .validation-complete {
+  pointer-events: auto;
+}
+
+.validation-shell.is-result-stage .validation-complete {
+  position: fixed;
+  top: 84px;
+  left: 20px;
+  width: min(520px, calc(100% - 40px));
+  max-height: calc(100vh - 104px);
+  margin: 0;
+  padding: 22px;
+  overflow: auto;
+  border-radius: 18px;
+  background: rgb(7 18 24 / 0.94);
+  text-align: left;
+  backdrop-filter: blur(18px);
+}
+
+.validation-shell.is-result-stage .validation-complete > h2 {
+  margin-block: 4px 6px;
+  font-size: 26px;
+}
+
+.validation-shell.is-result-stage .validation-complete > p {
+  margin-block: 0;
+  font-size: 12px;
+}
+
 .validation-result-review {
   margin: 24px 0;
   padding: 18px;
@@ -1512,6 +1542,54 @@ body.validation-active .controls-pane {
   border-radius: 18px;
   background: rgb(4 13 18 / 0.5);
   text-align: left;
+}
+
+.validation-result-viewer-guide {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgb(126 231 239 / 0.14);
+  border-radius: 12px;
+  background: rgb(1 8 12 / 0.36);
+  color: #bcd3d9;
+  font-size: 11px;
+}
+
+.validation-result-viewer-guide strong {
+  flex-basis: 100%;
+  color: #effcfd;
+  font-size: 12px;
+}
+
+.validation-result-viewer-guide span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.validation-result-viewer-guide i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.validation-result-viewer-guide i.is-target {
+  background: #62f0a7;
+  color: #62f0a7;
+}
+
+.validation-result-viewer-guide i.is-answer {
+  background: #ffb45e;
+  color: #ffb45e;
+}
+
+.validation-result-viewer-guide small {
+  flex-basis: 100%;
+  color: #829ba4;
 }
 
 .validation-result-summary,
@@ -1561,6 +1639,21 @@ body.validation-active .controls-pane {
   border: 1px solid rgb(126 231 239 / 0.16);
   border-radius: 14px;
   background: #09151b;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.validation-result-card:hover,
+.validation-result-card:focus-visible {
+  border-color: rgb(126 231 239 / 0.46);
+  outline: none;
+}
+
+.validation-result-card.is-selected {
+  border-color: #7ee7ef;
+  background: #10232c;
+  box-shadow: 0 0 0 1px rgb(126 231 239 / 0.18);
+  transform: translateY(-1px);
 }
 
 .validation-result-card > header strong {
@@ -1715,5 +1808,13 @@ body.validation-active .controls-pane {
     top: 76px;
     width: calc(100% - 24px);
     justify-content: space-between;
+  }
+
+  .validation-shell.is-result-stage .validation-complete {
+    top: auto;
+    bottom: 12px;
+    left: 12px;
+    width: calc(100% - 24px);
+    max-height: min(58vh, 620px);
   }
 }

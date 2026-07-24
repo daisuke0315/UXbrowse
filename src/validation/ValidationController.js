@@ -109,6 +109,7 @@ export class ValidationController {
     this.els.shell.hidden = false;
     this.els.shell.classList.remove("is-viewer-stage");
     this.els.shell.classList.remove("is-response-stage");
+    this.els.shell.classList.remove("is-result-stage");
     this.showOnly("setup");
     this.els.title.textContent = practice ? "練習モード設定" : "検証モード設定";
     this.els.participantBadge.textContent = practice ? "練習" : "未開始";
@@ -133,6 +134,7 @@ export class ValidationController {
     this.els.shell.hidden = false;
     this.els.shell.classList.add("is-viewer-stage");
     this.els.shell.classList.remove("is-response-stage");
+    this.els.shell.classList.remove("is-result-stage");
     this.showOnly("targetEditor");
     this.els.title.textContent = "正解座標設定";
     this.els.participantBadge.textContent = "研究担当者";
@@ -256,6 +258,7 @@ export class ValidationController {
     this.els.shell.hidden = true;
     this.els.shell.classList.remove("is-viewer-stage");
     this.els.shell.classList.remove("is-response-stage");
+    this.els.shell.classList.remove("is-result-stage");
     this.targetDraftDicom = null;
     this.targetBaseDicom = null;
   }
@@ -346,6 +349,7 @@ export class ValidationController {
     this.els.responsePanel.hidden = true;
     this.els.endObservation.hidden = false;
     this.els.shell.classList.remove("is-response-stage");
+    this.els.shell.classList.remove("is-result-stage");
     this.els.shell.classList.toggle("is-viewer-stage", trial.condition === "proposal");
     this.els.mprGrid.hidden = trial.condition !== "mpr";
     if (trial.condition === "mpr") this.renderThreePlaneMpr(trial.target_xyz_mm);
@@ -547,13 +551,14 @@ export class ValidationController {
   completeSession() {
     this.detachPicking();
     this.getScene().clearValidationMarkers();
-    this.getScene().setValidationResponseMode(false);
+    this.getScene().setValidationResponseMode(true);
     this.session.status = "completed";
     this.session.completed_at = new Date().toISOString();
     this.log("session_completed", {});
     this.persist();
-    this.els.shell.classList.remove("is-viewer-stage");
+    this.els.shell.classList.add("is-viewer-stage");
     this.els.shell.classList.remove("is-response-stage");
+    this.els.shell.classList.add("is-result-stage");
     this.els.title.textContent = this.isPractice ? "練習完了" : "検証完了";
     this.els.completeTitle.textContent = this.isPractice ? "練習が完了しました" : "検証が完了しました";
     this.renderResultReview();
@@ -573,9 +578,18 @@ export class ValidationController {
       : 0;
     this.els.averageError.textContent = trials.length ? `${average.toFixed(1)} mm` : "-";
     const fragment = document.createDocumentFragment();
-    for (const trial of trials) {
+    for (const [index, trial] of trials.entries()) {
       const card = document.createElement("article");
       card.className = "validation-result-card";
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      card.setAttribute("aria-label", `${trial.condition === "mpr" ? "MPR条件" : "提案ビューア条件"}をモデル上で確認`);
+      card.addEventListener("click", () => this.selectResultTrial(index));
+      card.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        this.selectResultTrial(index);
+      });
 
       const header = document.createElement("header");
       const condition = document.createElement("strong");
@@ -622,6 +636,21 @@ export class ValidationController {
       fragment.append(card);
     }
     this.els.resultList.replaceChildren(fragment);
+    if (trials.length) this.selectResultTrial(0);
+  }
+
+  selectResultTrial(index) {
+    const trials = this.session?.trials?.filter((trial) => trial.status === "completed") ?? [];
+    const trial = trials[index];
+    if (!trial) return;
+    for (const [cardIndex, card] of [...this.els.resultList.children].entries()) {
+      const selected = cardIndex === index;
+      card.classList.toggle("is-selected", selected);
+      card.setAttribute("aria-pressed", String(selected));
+    }
+    this.getScene().showValidationResult(trial.target_xyz_mm, trial.answer_xyz_mm);
+    this.els.resultViewerCondition.textContent =
+      trial.condition === "mpr" ? `MPR条件 · ${this.isPractice ? "練習" : "試行"} ${trial.sequence_no}` : `提案ビューア条件 · ${this.isPractice ? "練習" : "試行"} ${trial.sequence_no}`;
   }
 
   showOnly(name) {

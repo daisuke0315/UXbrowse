@@ -579,6 +579,37 @@ export class ThreeSceneManager {
     }
   }
 
+  showValidationResult(targetDicomPoint, answerDicomPoint) {
+    this.clearValidationMarkers();
+    this.validationTargetMarker = this.createValidationMarker(targetDicomPoint, 0x62f0a7, 1.2, {
+      opacity: 0.94,
+      depthTest: true,
+      label: "正",
+      name: "validation-result-target",
+    });
+    this.validationTargetXrayMarker = this.createValidationMarker(targetDicomPoint, 0x62f0a7, 1.2, {
+      opacity: 0.3,
+      depthTest: false,
+      destinationScene: this.validationOverlayScene,
+      label: "正",
+      name: "validation-result-target-xray",
+    });
+    this.validationAnswerMarker = this.createValidationMarker(answerDicomPoint, 0xffb45e, 1.05, {
+      opacity: 0.94,
+      depthTest: true,
+      label: "答",
+      name: "validation-result-answer",
+    });
+    this.validationAnswerXrayMarker = this.createValidationMarker(answerDicomPoint, 0xffb45e, 1.05, {
+      opacity: 0.3,
+      depthTest: false,
+      destinationScene: this.validationOverlayScene,
+      label: "答",
+      name: "validation-result-answer-xray",
+    });
+    this.requestRender();
+  }
+
   getValidationInitialAnswerPoint() {
     if (!this.objModel || !this.THREE) return null;
     this.scene.updateMatrixWorld(true);
@@ -592,6 +623,7 @@ export class ThreeSceneManager {
     depthTest = false,
     destinationScene = this.scene,
     name = "validation-marker",
+    label = "",
   } = {}) {
     if (!this.mapper || !this.scene) return null;
     const point = this.mapper.dicomPointToThree(dicomPoint);
@@ -607,12 +639,20 @@ export class ThreeSceneManager {
     context.arc(64, 64, 30, 0, Math.PI * 2);
     context.fill();
     context.stroke();
-    context.beginPath();
-    context.moveTo(12, 64);
-    context.lineTo(116, 64);
-    context.moveTo(64, 12);
-    context.lineTo(64, 116);
-    context.stroke();
+    if (label) {
+      context.fillStyle = cssColor;
+      context.font = "800 54px system-ui, sans-serif";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(label, 64, 67);
+    } else {
+      context.beginPath();
+      context.moveTo(12, 64);
+      context.lineTo(116, 64);
+      context.moveTo(64, 12);
+      context.lineTo(64, 116);
+      context.stroke();
+    }
     const texture = new this.THREE.CanvasTexture(markerCanvas);
     const marker = new this.THREE.Sprite(new this.THREE.SpriteMaterial({
       map: texture,
@@ -823,6 +863,7 @@ export class ThreeSceneManager {
   clearValidationAnswer() {
     this.endValidationMarkerDrag();
     this.disposeValidationMarker("validationAnswerMarker");
+    this.disposeValidationMarker("validationAnswerXrayMarker");
     if (this.validationGizmo) {
       this.scene.remove(this.validationGizmo);
       this.validationGizmo.traverse((object) => {

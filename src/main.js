@@ -7,12 +7,12 @@ import { ValidationLogger } from "./ValidationLogger.js";
 import { formatVector } from "./math3d.js";
 import { volumeCenter } from "./VolumeGeometry.js";
 import { viewerConfig } from "./config/viewerConfig.js?v=interaction-defaults-1";
-import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=validation-target-overlay-1";
+import { ThreeSceneManager } from "./three/ThreeSceneManager.js?v=validation-result-markers-1";
 import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController, constrainDicomInputToPlane } from "./three/DynamicMprController.js?v=fixed-mpr-plane-2";
 import { MprUpdateScheduler } from "./three/MprUpdateScheduler.js";
-import { ValidationController } from "./validation/ValidationController.js?v=result-review-1";
+import { ValidationController } from "./validation/ValidationController.js?v=result-model-review-1";
 
 const logger = new ValidationLogger();
 const loader = new DicomLoader(logger);
@@ -310,6 +310,7 @@ const validationController = new ValidationController({
     completeTitle: document.querySelector("#validationCompleteTitle"),
     completeText: document.querySelector("#validationCompleteText"),
     averageError: document.querySelector("#validationAverageError"),
+    resultViewerCondition: document.querySelector("#validationResultViewerCondition"),
     resultList: document.querySelector("#validationResultList"),
     targetDataset: document.querySelector("#validationTargetDataset"),
     targetSlot: document.querySelector("#validationTargetSlot"),
