@@ -564,12 +564,6 @@ export class ThreeSceneManager {
       depthTest: true,
       name: "validation-target-sphere",
     });
-    this.validationTargetXrayMarker = this.createValidationSphereMarker(dicomPoint, 0x62f0a7, {
-      opacity: 0.32,
-      depthTest: false,
-      destinationScene: this.validationOverlayScene,
-      name: "validation-target-sphere-overlay",
-    });
   }
 
   showValidationAnswer(dicomPoint) {
@@ -1333,13 +1327,9 @@ export class ThreeSceneManager {
     );
     const modelIsInFront = this.isModelInFrontOfValidationTarget();
     const isOccluded = planeIsInFront || modelIsInFront;
-    // 通常時は陰影付きの不透明球だけを表示する。
-    // モデル内部またはMPRの奥に入った場合だけ半透明のx-ray球へ切り替える。
+    // 通常時は陰影付きの不透明球を表示し、
+    // モデルまたはMPRに隠れた場合は完全に非表示にする。
     this.validationTargetMarker.visible = !isOccluded;
-    if (this.validationTargetXrayMarker) {
-      this.validationTargetXrayMarker.visible = isOccluded;
-      this.validationTargetXrayMarker.material.opacity = 0.42;
-    }
   }
 
   isModelInFrontOfValidationTarget() {
@@ -1359,7 +1349,41 @@ export class ThreeSceneManager {
       Math.max(0, targetDistance - surfaceBias),
     );
     this.objModel.updateMatrixWorld(true);
-    return raycaster.intersectObject(this.objModel, true).length > 0;
+    return raycaster
+      .intersectObject(this.objModel, true)
+      .some((intersection) => !this.isModelPointTransparentAtMpr(intersection.point));
+  }
+
+  isModelPointTransparentAtMpr(point) {
+    const visibility = this.modelVisibility;
+    if (!visibility?.enabled || !this.camera) return false;
+    const relative = point.clone().sub(visibility.planeCenter);
+    const viewRay = point.clone().sub(this.camera.position);
+    const denominator = viewRay.dot(visibility.planeNormal);
+    if (Math.abs(denominator) <= 1e-6) return false;
+    const rayT = visibility.planeCenter.clone().sub(this.camera.position).dot(visibility.planeNormal) / denominator;
+    if (rayT <= 0) return false;
+    const planeIntersection = this.camera.position.clone().addScaledVector(viewRay, rayT);
+    const projected = planeIntersection.sub(visibility.planeCenter);
+    const insideFov = Math.abs(projected.dot(visibility.planeU)) <= visibility.planeHalfSize.x
+      && Math.abs(projected.dot(visibility.planeV)) <= visibility.planeHalfSize.y;
+    if (!insideFov) return false;
+
+    const cameraDistance = this.camera.position.clone().sub(visibility.planeCenter).dot(visibility.planeNormal);
+    const frontSide = Math.abs(visibility.fixedFrontSide) > 0.5
+      ? visibility.fixedFrontSide
+      : (cameraDistance < 0 ? -1 : 1);
+    const signedDistance = relative.dot(visibility.planeNormal);
+    if (signedDistance * frontSide <= 0) return false;
+
+    const distanceFromPlane = Math.abs(signedDistance);
+    const foregroundDistance = Math.max(0, visibility.foregroundDistance);
+    const fadeWidth = Math.max(1e-4, visibility.fadeWidth);
+    const frontMask = foregroundDistance <= 1e-4
+      ? 1
+      : 1 - smoothstep(foregroundDistance, foregroundDistance + fadeWidth, distanceFromPlane);
+    const alpha = 1 + (visibility.frontAlpha - 1) * frontMask;
+    return alpha < 0.98;
   }
 
   useInteractivePixelRatio() {
@@ -1514,6 +1538,13 @@ export function isPointBehindDisplayPlane(cameraPosition, pointPosition, planeIn
 
 function dot3(a, b) {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function smoothstep(edge0, edge1, value) {
+  const range = edge1 - edge0;
+  if (range <= 0) return value < edge0 ? 0 : 1;
+  const t = Math.max(0, Math.min(1, (value - edge0) / range));
+  return t * t * (3 - 2 * t);
 }
 
 function normalizeLocalResourcePath(value) {
