@@ -106,7 +106,6 @@ export class ThreeSceneManager {
     this.scene.add(this.referenceCube);
     this.mprPlaneOverlay = new MprPlaneOverlay(THREE, this.scene);
     this.modelVisibility = new ModelVisibilityShaderController(THREE);
-    this.validationMarkerVisibility = new ModelVisibilityShaderController(THREE);
     this.weightedOit = new WeightedBlendedOitRenderer(THREE, this.renderer, this.scene, this.camera);
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -204,7 +203,6 @@ export class ThreeSceneManager {
     this.mprPlaneOverlay?.setOptions({ visible: false });
     this.foregroundOptions.enabled = false;
     this.modelVisibility?.setOptions(this.foregroundOptions);
-    this.validationMarkerVisibility?.setOptions(this.foregroundOptions);
     this.refreshSceneContentBounds();
     this.requestRender();
   }
@@ -579,25 +577,18 @@ export class ThreeSceneManager {
     );
     this.camera.position.set(...pose.camera);
     this.controls.target.set(...pose.target);
-    this.validationTargetMarker.material.transparent = true;
+    this.validationTargetMarker.material.transparent = false;
     this.validationTargetMarker.material.opacity = 1;
     // メインシーンの深度バッファを使い、球をピクセル単位でモデルに隠す。
     // 球全体の表示/非表示を切り替えないため、断面通過時も連続的に縮小する。
     this.validationTargetMarker.material.depthTest = true;
     this.validationTargetMarker.material.depthWrite = false;
-    this.validationTargetMarker.material.side = this.THREE.DoubleSide;
-    // Three.jsの透明DoubleSide既定動作（裏面→表面の2パス描画）を止める。
-    // 切断後の奥側球面は残しつつ、円が二重に重なる見え方を防ぐ。
-    this.validationTargetMarker.material.forceSinglePass = true;
+    this.validationTargetMarker.material.side = this.THREE.FrontSide;
     this.validationTargetMarker.material.needsUpdate = true;
-    this.validationTargetMarker.userData.usesMprTransparency = true;
+    this.validationTargetMarker.userData.usesMprSphereSection = true;
     this.ensureValidationOverlayLights();
     this.validationOverlayScene.add(this.validationTargetMarker);
     this.validationTargetMarker.position.copy(targetWorld);
-    this.validationMarkerVisibility.applyToObject(
-      this.validationTargetMarker,
-      this.getValidationMarkerTransparencyOptions(),
-    );
     this.camera.updateMatrixWorld();
     this.controls.update();
     this.requestRender();
@@ -605,9 +596,10 @@ export class ThreeSceneManager {
 
   ensureValidationOverlayLights() {
     if (this.validationOverlayLights?.length) return;
-    const hemisphere = new this.THREE.HemisphereLight(0xffffff, 0x304050, 1.8);
-    const directional = new this.THREE.DirectionalLight(0xffffff, 1.5);
-    directional.position.set(1, -1, 2);
+    // 環境光を抑え、方向光の勾配で小さい球でも立体形状を判別できるようにする。
+    const hemisphere = new this.THREE.HemisphereLight(0xffffff, 0x182632, 0.6);
+    const directional = new this.THREE.DirectionalLight(0xffffff, 1.7);
+    directional.position.set(-1.2, -1.5, 2.4);
     this.validationOverlayScene.add(hemisphere, directional);
     this.validationOverlayLights = [hemisphere, directional];
   }
@@ -625,14 +617,6 @@ export class ThreeSceneManager {
     }).filter((value) => Number.isFinite(value) && value > 0);
     if (!axisRadii.length) return null;
     return axisRadii.reduce((sum, value) => sum + value, 0) / axisRadii.length;
-  }
-
-  getValidationMarkerTransparencyOptions() {
-    return {
-      ...this.foregroundOptions,
-      // 検証マーカーの前景側は、可視光モデルと同じ断面で完全に切断する。
-      frontAlpha: 0,
-    };
   }
 
   showValidationAnswer(dicomPoint) {
@@ -829,10 +813,10 @@ export class ThreeSceneManager {
     const material = depthTest
       ? new this.THREE.MeshStandardMaterial({
         color,
-        roughness: 0.32,
-        metalness: 0.06,
+        roughness: 0.42,
+        metalness: 0.03,
         emissive: new this.THREE.Color(color),
-        emissiveIntensity: 0.7,
+        emissiveIntensity: 0.12,
         transparent: false,
         opacity: 1,
         depthTest: true,
@@ -1040,7 +1024,6 @@ export class ThreeSceneManager {
   }
 
   clearValidationTarget() {
-    this.validationMarkerVisibility?.restore();
     this.disposeValidationMarker("validationTargetMarker");
     this.disposeValidationMarker("validationTargetXrayMarker");
   }
@@ -1095,7 +1078,6 @@ export class ThreeSceneManager {
       this.mprPlaneOverlay?.setOptions({ visible: false });
       this.foregroundOptions.enabled = false;
       this.modelVisibility?.setOptions(this.foregroundOptions);
-      this.validationMarkerVisibility?.setOptions(this.foregroundOptions);
     }
     this.requestRender();
   }
@@ -1145,7 +1127,6 @@ export class ThreeSceneManager {
         heightMm: planeInfo.heightMm,
       };
       this.modelVisibility.updatePlane(visibilityPlane);
-      this.validationMarkerVisibility.updatePlane(visibilityPlane);
     }
     this.updateForegroundTransparency(options);
     this.requestRender();
@@ -1157,7 +1138,6 @@ export class ThreeSceneManager {
       this.mprPlaneOverlay?.setOptions({ ...options, visible: false });
       this.foregroundOptions.enabled = false;
       this.modelVisibility?.setOptions(this.foregroundOptions);
-      this.validationMarkerVisibility?.setOptions(this.foregroundOptions);
       this.requestRender();
       return this.mprPlaneOverlay?.getPlaneInfo?.() ?? null;
     }
@@ -1177,7 +1157,6 @@ export class ThreeSceneManager {
       transparencyMode: "auto",
     };
     this.modelVisibility.setOptions(this.foregroundOptions);
-    this.validationMarkerVisibility.setOptions(this.getValidationMarkerTransparencyOptions());
     if (this.objModel) this.modelVisibility.applyToObject(this.objModel, this.foregroundOptions);
     this.requestRender();
   }
@@ -1192,7 +1171,6 @@ export class ThreeSceneManager {
     }
     this.foregroundOptions.fixedFrontSide = this.foregroundSideSign;
     this.modelVisibility?.setOptions(this.foregroundOptions);
-    this.validationMarkerVisibility?.setOptions(this.getValidationMarkerTransparencyOptions());
     this.requestRender();
     return this.foregroundSideSign;
   }
@@ -1396,10 +1374,15 @@ export class ThreeSceneManager {
   updateValidationTargetPlaneOcclusion() {
     if (!this.validationTargetMarker || !this.camera) return;
     const planeInfo = this.mprPlaneOverlay?.getPlaneInfo?.();
-    if (this.validationTargetMarker.userData.usesMprTransparency) {
-      // 可視光モデルとの前後関係は、保持された深度バッファに対する
-      // material.depthTestで球の各フラグメントへ連続的に反映する。
-      this.validationTargetMarker.visible = true;
+    if (this.validationTargetMarker.userData.usesMprSphereSection) {
+      const radius = this.validationTargetMarker.userData.validationRadius ?? 0;
+      const sectionScale = calculateValidationSphereSectionScale(
+        signedPointToPlaneDistance(this.getValidationTargetWorldPosition(), planeInfo),
+        radius,
+      );
+      this.validationTargetMarker.scale.setScalar(sectionScale);
+      // 可視光モデルとの前後関係はdepthTestで球面ごとに反映する。
+      this.validationTargetMarker.visible = sectionScale > 0.001;
       return;
     }
     const modelIsInFront = this.isModelInFrontOfValidationTarget();
@@ -1589,6 +1572,14 @@ export function calculateFocusAlignedCameraPose(cameraPosition, currentTarget, n
   };
 }
 
+export function calculateValidationSphereSectionScale(distanceFromPlane, sphereRadius) {
+  const radius = Number(sphereRadius);
+  const distance = Math.abs(Number(distanceFromPlane));
+  if (!(radius > 0) || !Number.isFinite(distance) || distance >= radius) return 0;
+  const normalizedDistance = distance / radius;
+  return Math.sqrt(Math.max(0, 1 - normalizedDistance * normalizedDistance));
+}
+
 export function calculateRequiredCameraFar(cameraPosition, contentCenter, contentRadius, minimumFar = 5000, padding = 1.1) {
   const dx = cameraPosition[0] - contentCenter[0];
   const dy = cameraPosition[1] - contentCenter[1];
@@ -1633,6 +1624,16 @@ export function isPointBehindDisplayPlane(cameraPosition, pointPosition, planeIn
   );
   return Math.abs(dot3(intersectionOffset, u)) <= width / 2 + epsilon
     && Math.abs(dot3(intersectionOffset, v)) <= height / 2 + epsilon;
+}
+
+function signedPointToPlaneDistance(pointPosition, planeInfo) {
+  const center = planeInfo?.centerThree;
+  const normal = planeInfo?.nThree;
+  if (![pointPosition, center, normal].every((value) => Array.isArray(value) && value.length === 3)) return 0;
+  return pointPosition.reduce(
+    (sum, value, index) => sum + (value - center[index]) * normal[index],
+    0,
+  );
 }
 
 function dot3(a, b) {

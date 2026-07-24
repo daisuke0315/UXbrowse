@@ -18,7 +18,7 @@
       import { WindowingProcessor } from "./src/WindowingProcessor.js";
       import { volumeCenter, volumeVoxelCenterSpan } from "./src/VolumeGeometry.js";
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
-      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=proposal-target-single-pass-1";
+      import { ThreeSceneManager, calculateFocusAlignedCameraPose, calculateRequiredCameraFar, calculateRequiredCameraNear, calculateValidationSphereSectionScale, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=proposal-target-symmetric-sphere-2";
       import { dot, length } from "./src/math3d.js";
       import { buildTargets, calculateSliceOffsetRange, calculateSphereSectionRadius, calculateValidationError, projectPointToMprPixel } from "./src/validation/ValidationController.js?v=mpr-sphere-section-1";
 
@@ -120,6 +120,13 @@
           && attachedPose.camera.map((value, index) => value - attachedPose.target[index])
             .every((value, index) => close(value, [9, 18, 27][index])),
       );
+      assert("UT-133 validation sphere is full at plane center", close(calculateValidationSphereSectionScale(0, 10), 1));
+      assert(
+        "UT-134 validation sphere shrinks symmetrically",
+        close(calculateValidationSphereSectionScale(-8, 10), 0.6)
+          && close(calculateValidationSphereSectionScale(8, 10), 0.6),
+      );
+      assert("UT-135 validation sphere disappears outside section", calculateValidationSphereSectionScale(10, 10) === 0);
       const validationPlane = {
         visible: true,
         centerThree: [0, 0, 0],
