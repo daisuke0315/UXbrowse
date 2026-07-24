@@ -400,6 +400,10 @@ export class ValidationController {
     const trial = this.currentTrial();
     if (!trial || trial.status !== "observing") return;
     trial.observation_ended_at = new Date().toISOString();
+    trial.observation_time_ms = calculateElapsedTimeMs(
+      trial.observation_started_at,
+      trial.observation_ended_at,
+    );
     trial.final_camera_pose = this.getScene().getCameraPose();
     trial.status = "responding";
     this.getScene().clearValidationMarkers();
@@ -612,14 +616,18 @@ export class ValidationController {
         ["ΔX", `${signedFixed(trial.delta_xyz_mm[0])} mm`],
         ["ΔY", `${signedFixed(trial.delta_xyz_mm[1])} mm`],
         ["ΔZ", `${signedFixed(trial.delta_xyz_mm[2])} mm`],
+        ["観察時間", `${(getObservationTimeMs(trial) / 1000).toFixed(1)} 秒`],
         ["回答時間", `${(trial.response_time_ms / 1000).toFixed(1)} 秒`],
       ];
       for (const [label, value] of metricValues) {
+        const metric = document.createElement("div");
+        metric.className = "validation-result-metric";
         const term = document.createElement("dt");
         term.textContent = label;
         const description = document.createElement("dd");
         description.textContent = value;
-        metrics.append(term, description);
+        metric.append(term, description);
+        metrics.append(metric);
       }
 
       const details = document.createElement("details");
@@ -814,10 +822,24 @@ function trialToFlatRecord(session, trial) {
     dy_mm: fixed(trial.delta_xyz_mm[1]),
     dz_mm: fixed(trial.delta_xyz_mm[2]),
     error_3d_mm: fixed(trial.error_3d_mm),
+    observation_time_ms: getObservationTimeMs(trial),
     response_time_ms: trial.response_time_ms,
     reposition_count: trial.reposition_count,
     status: trial.status,
   };
+}
+
+function getObservationTimeMs(trial) {
+  const stored = Number(trial?.observation_time_ms);
+  if (Number.isFinite(stored) && stored >= 0) return Math.round(stored);
+  return calculateElapsedTimeMs(trial?.observation_started_at, trial?.observation_ended_at);
+}
+
+function calculateElapsedTimeMs(startedAt, endedAt) {
+  const start = Date.parse(startedAt);
+  const end = Date.parse(endedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  return Math.max(0, Math.round(end - start));
 }
 
 function readSessions() {
