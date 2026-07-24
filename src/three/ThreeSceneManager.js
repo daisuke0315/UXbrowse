@@ -581,7 +581,9 @@ export class ThreeSceneManager {
     this.controls.target.set(...pose.target);
     this.validationTargetMarker.material.transparent = true;
     this.validationTargetMarker.material.opacity = 1;
-    this.validationTargetMarker.material.depthTest = false;
+    // メインシーンの深度バッファを使い、球をピクセル単位でモデルに隠す。
+    // 球全体の表示/非表示を切り替えないため、断面通過時も連続的に縮小する。
+    this.validationTargetMarker.material.depthTest = true;
     this.validationTargetMarker.material.depthWrite = false;
     this.validationTargetMarker.material.side = this.THREE.DoubleSide;
     this.validationTargetMarker.material.needsUpdate = true;
@@ -1391,13 +1393,13 @@ export class ThreeSceneManager {
   updateValidationTargetPlaneOcclusion() {
     if (!this.validationTargetMarker || !this.camera) return;
     const planeInfo = this.mprPlaneOverlay?.getPlaneInfo?.();
-    const modelIsInFront = this.isModelInFrontOfValidationTarget();
     if (this.validationTargetMarker.userData.usesMprTransparency) {
-      // マーカーはオーバーレイ層で描画するため、可視光モデルとの深度関係は
-      // raycastで明示的に反映する。MPRで切断されたモデル面は判定から除外される。
-      this.validationTargetMarker.visible = !modelIsInFront;
+      // 可視光モデルとの前後関係は、保持された深度バッファに対する
+      // material.depthTestで球の各フラグメントへ連続的に反映する。
+      this.validationTargetMarker.visible = true;
       return;
     }
+    const modelIsInFront = this.isModelInFrontOfValidationTarget();
     const planeIsInFront = isPointBehindDisplayPlane(
       this.camera.position.toArray(),
       this.getValidationTargetWorldPosition(),
