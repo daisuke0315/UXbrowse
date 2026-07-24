@@ -563,7 +563,7 @@ export class ThreeSceneManager {
 
   showValidationAnswer(dicomPoint) {
     this.clearValidationAnswer();
-    this.validationAnswerMarker = this.createValidationMarker(dicomPoint, 0x7ee7ef, 1);
+    this.validationAnswerMarker = this.createValidationMarker(dicomPoint, 0x7ee7ef, 1, { opacity: 0.52 });
     if (this.validationAnswerMarker) {
       this.validationGizmo = this.createValidationGizmo(this.validationAnswerMarker.position);
     }
@@ -577,7 +577,7 @@ export class ThreeSceneManager {
     return bounds.getCenter(new this.THREE.Vector3()).toArray();
   }
 
-  createValidationMarker(dicomPoint, color, scale = 1) {
+  createValidationMarker(dicomPoint, color, scale = 1, { opacity = 1 } = {}) {
     if (!this.mapper || !this.scene) return null;
     const point = this.mapper.dicomPointToThree(dicomPoint);
     const markerCanvas = document.createElement("canvas");
@@ -602,6 +602,7 @@ export class ThreeSceneManager {
     const marker = new this.THREE.Sprite(new this.THREE.SpriteMaterial({
       map: texture,
       transparent: true,
+      opacity,
       depthTest: false,
       depthWrite: false,
       toneMapped: false,
@@ -629,30 +630,53 @@ export class ThreeSceneManager {
       { name: "Z", vector: new THREE.Vector3(0, 0, 1), color: 0x59a8ff, rotate: ["x", Math.PI / 2] },
     ];
     for (const axis of axes) {
-      const material = new THREE.MeshBasicMaterial({
-        color: axis.color,
-        depthTest: false,
-        depthWrite: false,
-        transparent: true,
-        opacity: 0.78,
-        toneMapped: false,
-      });
-      const shaft = new THREE.Mesh(
-        new THREE.CylinderGeometry(shaftRadius, shaftRadius, length - coneLength, 12),
-        material
-      );
-      shaft.position.copy(axis.vector).multiplyScalar((length - coneLength) / 2);
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(coneRadius, coneLength, 16), material.clone());
-      cone.position.copy(axis.vector).multiplyScalar(length - coneLength / 2);
-      for (const mesh of [shaft, cone]) {
-        if (axis.rotate) mesh.rotation[axis.rotate[0]] = axis.rotate[1];
-        mesh.userData.validationAxis = axis.name;
-        mesh.renderOrder = 1002;
-        group.add(mesh);
+      const layers = [
+        { name: "xray", depthTest: false, opacity: 0.32, renderOrder: 1001 },
+        { name: "visible", depthTest: true, opacity: 0.92, renderOrder: 1002 },
+      ];
+      for (const layer of layers) {
+        const material = new THREE.MeshBasicMaterial({
+          color: axis.color,
+          depthTest: layer.depthTest,
+          depthWrite: false,
+          transparent: true,
+          opacity: layer.opacity,
+          toneMapped: false,
+        });
+        const shaft = new THREE.Mesh(
+          new THREE.CylinderGeometry(shaftRadius, shaftRadius, length - coneLength, 12),
+          material
+        );
+        shaft.position.copy(axis.vector).multiplyScalar((length - coneLength) / 2);
+        const cone = new THREE.Mesh(
+          new THREE.ConeGeometry(coneRadius, coneLength, 16),
+          material.clone()
+        );
+        cone.position.copy(axis.vector).multiplyScalar(length - coneLength / 2);
+        for (const mesh of [shaft, cone]) {
+          if (axis.rotate) mesh.rotation[axis.rotate[0]] = axis.rotate[1];
+          mesh.userData.validationAxis = axis.name;
+          mesh.userData.validationLayer = layer.name;
+          mesh.renderOrder = layer.renderOrder;
+          group.add(mesh);
+        }
       }
-      const label = this.createValidationAxisLabel(axis.name, axis.color, length * 0.22);
-      label.position.copy(axis.vector).multiplyScalar(length * 1.12);
-      group.add(label);
+      const xrayLabel = this.createValidationAxisLabel(axis.name, axis.color, length * 0.22, {
+        depthTest: false,
+        opacity: 0.38,
+        renderOrder: 1001,
+        layerName: "xray",
+      });
+      const visibleLabel = this.createValidationAxisLabel(axis.name, axis.color, length * 0.22, {
+        depthTest: true,
+        opacity: 0.95,
+        renderOrder: 1003,
+        layerName: "visible",
+      });
+      for (const label of [xrayLabel, visibleLabel]) {
+        label.position.copy(axis.vector).multiplyScalar(length * 1.12);
+        group.add(label);
+      }
     }
     group.position.copy(position);
     group.userData.axisLength = length;
@@ -662,7 +686,12 @@ export class ThreeSceneManager {
     return group;
   }
 
-  createValidationAxisLabel(text, color, size) {
+  createValidationAxisLabel(text, color, size, {
+    depthTest = false,
+    opacity = 0.92,
+    renderOrder = 1003,
+    layerName = "visible",
+  } = {}) {
     const canvas = document.createElement("canvas");
     canvas.width = 96;
     canvas.height = 96;
@@ -684,14 +713,14 @@ export class ThreeSceneManager {
     const label = new this.THREE.Sprite(new this.THREE.SpriteMaterial({
       map: texture,
       transparent: true,
-      opacity: 0.92,
-      depthTest: false,
+      opacity,
+      depthTest,
       depthWrite: false,
       toneMapped: false,
     }));
     label.scale.set(size, size, 1);
-    label.renderOrder = 1003;
-    label.name = `validation-axis-${text}`;
+    label.renderOrder = renderOrder;
+    label.name = `validation-axis-${text}-${layerName}`;
     return label;
   }
 
