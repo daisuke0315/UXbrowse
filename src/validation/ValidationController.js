@@ -403,7 +403,7 @@ export class ValidationController {
       this.getMprIntersectionPoint(),
       this.mprTarget,
       offsetMm,
-      Math.max(12, this.getScene()?.getValidationTargetRadiusDicom?.() ?? 12),
+      Math.max(6, this.getScene()?.getValidationTargetRadiusDicom?.() ?? 6),
       definition,
       this.mprDefinitions,
     );
