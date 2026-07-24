@@ -401,6 +401,8 @@ export class ValidationController {
       result,
       request,
       this.getMprIntersectionPoint(),
+      this.mprTarget,
+      offsetMm,
       definition,
       this.mprDefinitions,
     );
@@ -733,12 +735,21 @@ function voxelToDicom(metadata, voxel) {
   ];
 }
 
-function drawLinkedMprCrosshair(canvas, result, request, point, currentDefinition, definitions) {
+function drawLinkedMprCrosshair(
+  canvas,
+  result,
+  request,
+  intersectionPoint,
+  targetPoint,
+  offsetMm,
+  currentDefinition,
+  definitions,
+) {
   canvas.width = result.width;
   canvas.height = result.height;
   const context = canvas.getContext("2d");
   context.putImageData(new ImageData(result.rgba, result.width, result.height), 0, 0);
-  const projected = projectPointToMprPixel(result, request, point);
+  const projected = projectPointToMprPixel(result, request, intersectionPoint);
   for (const definition of definitions) {
     if (definition === currentDefinition) continue;
     const controlsHorizontalCoordinate =
@@ -759,12 +770,15 @@ function drawLinkedMprCrosshair(canvas, result, request, point, currentDefinitio
     projected.x >= 0 && projected.x <= result.width - 1
     && projected.y >= 0 && projected.y <= result.height - 1
   ) {
-    context.strokeStyle = "rgb(255 255 255 / 0.92)";
-    context.lineWidth = 1.5;
-    context.beginPath();
-    context.arc(projected.x, projected.y, 5, 0, Math.PI * 2);
-    context.stroke();
+    drawIntersectionPoint(context, projected);
   }
+  drawMprTargetMarker(
+    context,
+    projectPointToMprPixel(result, request, targetPoint),
+    offsetMm,
+    result.width,
+    result.height,
+  );
 }
 
 function drawCrosshairLine(context, { vertical, coordinate, width, height, color }) {
@@ -779,12 +793,45 @@ function drawCrosshairLine(context, { vertical, coordinate, width, height, color
     }
     context.stroke();
   };
-  context.strokeStyle = "rgb(0 0 0 / 0.72)";
-  context.lineWidth = 4;
+  context.strokeStyle = "rgb(0 0 0 / 0.65)";
+  context.lineWidth = 2.25;
   draw();
   context.strokeStyle = color;
-  context.lineWidth = 1.5;
+  context.lineWidth = 0.85;
   draw();
+}
+
+function drawIntersectionPoint(context, point) {
+  context.fillStyle = "rgb(255 255 255 / 0.9)";
+  context.beginPath();
+  context.arc(point.x, point.y, 2, 0, Math.PI * 2);
+  context.fill();
+}
+
+function drawMprTargetMarker(context, point, offsetMm, width, height) {
+  if (point.x < 0 || point.x > width - 1 || point.y < 0 || point.y > height - 1) return;
+  const alpha = Math.max(0.8, Math.max(0, 1 - Math.abs(offsetMm) / 12));
+  const draw = () => {
+    context.beginPath();
+    context.arc(point.x, point.y, 8, 0, Math.PI * 2);
+    context.moveTo(point.x - 14, point.y);
+    context.lineTo(point.x - 10, point.y);
+    context.moveTo(point.x + 10, point.y);
+    context.lineTo(point.x + 14, point.y);
+    context.moveTo(point.x, point.y - 14);
+    context.lineTo(point.x, point.y - 10);
+    context.moveTo(point.x, point.y + 10);
+    context.lineTo(point.x, point.y + 14);
+    context.stroke();
+  };
+  context.setLineDash(Math.abs(offsetMm) > 0.5 ? [3, 2] : []);
+  context.strokeStyle = `rgb(0 0 0 / ${Math.min(0.85, alpha + 0.25)})`;
+  context.lineWidth = 5;
+  draw();
+  context.strokeStyle = `rgb(255 214 92 / ${alpha})`;
+  context.lineWidth = 2.25;
+  draw();
+  context.setLineDash([]);
 }
 
 export function projectPointToMprPixel(result, request, point) {
