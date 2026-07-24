@@ -99,17 +99,12 @@ export class MprPlaneOverlay {
       }
     }
     this.textureContext.putImageData(new ImageData(rgba, result.width, result.height), 0, 0);
-    const centerIndex = (
-      Math.floor(result.height / 2) * result.width
-      + Math.floor(result.width / 2)
-    ) * 4;
     this.lastThresholdInfo = {
       thresholdAlphaEnabled,
       transparentThreshold,
       transparentCount,
       totalPixels: result.pixels.length,
       transparentRatio: result.pixels.length > 0 ? transparentCount / result.pixels.length : 0,
-      centerAlpha: rgba[centerIndex + 3] ?? 0,
     };
   }
 
