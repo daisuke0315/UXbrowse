@@ -34,16 +34,19 @@ export class ValidationController {
     this.pickingPurpose = null;
     this.mprDefinitions = [
       {
+        id: "sagittal", color: "#ff6b7a",
         normal: [1, 0, 0], up: [0, 0, -1], canvas: elements.sagittal,
         slider: elements.sagittalOffset, output: elements.sagittalOffsetValue,
         zoom: elements.sagittalZoom, zoomOutput: elements.sagittalZoomValue,
       },
       {
+        id: "coronal", color: "#62f0a7",
         normal: [0, 1, 0], up: [0, 0, -1], canvas: elements.coronal,
         slider: elements.coronalOffset, output: elements.coronalOffsetValue,
         zoom: elements.coronalZoom, zoomOutput: elements.coronalZoomValue,
       },
       {
+        id: "axial", color: "#59a8ff",
         normal: [0, 0, 1], up: [0, 1, 0], canvas: elements.axial,
         slider: elements.axialOffset, output: elements.axialOffsetValue,
         zoom: elements.axialZoom, zoomOutput: elements.axialZoomValue,
@@ -78,7 +81,7 @@ export class ValidationController {
     this.els.targetExport.addEventListener("click", () => this.exportTargetOverrides());
     this.els.targetClose.addEventListener("click", () => this.close());
     for (const definition of this.mprDefinitions) {
-      definition.slider.addEventListener("input", () => this.renderMprPlane(definition));
+      definition.slider.addEventListener("input", () => this.renderAllMprPlanes());
       definition.zoom.addEventListener("input", () => this.renderMprPlane(definition));
       definition.canvas.addEventListener("wheel", (event) => {
         if (this.els.mprGrid.hidden) return;
@@ -98,7 +101,7 @@ export class ValidationController {
           Math.min(Number(definition.slider.max), Number(definition.slider.value) + direction)
         );
         definition.slider.value = String(next);
-        this.renderMprPlane(definition);
+        this.renderAllMprPlanes();
       }, { passive: false });
     }
   }
@@ -366,8 +369,12 @@ export class ValidationController {
       definition.slider.max = String(Math.floor(range.max));
       definition.slider.value = "0";
       definition.zoom.value = "1";
-      this.renderMprPlane(definition);
     }
+    this.renderAllMprPlanes();
+  }
+
+  renderAllMprPlanes() {
+    for (const definition of this.mprDefinitions) this.renderMprPlane(definition);
   }
 
   renderMprPlane(definition) {
@@ -389,11 +396,25 @@ export class ValidationController {
       normalOffset: 0,
     };
     const result = this.renderMpr(volume, request);
-    drawMprWithTarget(definition.canvas, result, offsetMm);
+    drawLinkedMprCrosshair(
+      definition.canvas,
+      result,
+      request,
+      this.getMprIntersectionPoint(),
+      definition,
+      this.mprDefinitions,
+    );
     definition.output.textContent = offsetMm === 0
       ? "基準断面"
       : `基準から ${offsetMm > 0 ? "+" : ""}${offsetMm} mm`;
     definition.zoomOutput.textContent = `${Math.round(zoom * 100)}%`;
+  }
+
+  getMprIntersectionPoint() {
+    return this.mprDefinitions.reduce((point, definition) => {
+      const offsetMm = Number(definition.slider.value) || 0;
+      return point.map((value, index) => value + definition.normal[index] * offsetMm);
+    }, [...this.mprTarget]);
   }
 
   beginResponse() {
@@ -712,27 +733,66 @@ function voxelToDicom(metadata, voxel) {
   ];
 }
 
-function drawMprWithTarget(canvas, result, offsetMm = 0) {
+function drawLinkedMprCrosshair(canvas, result, request, point, currentDefinition, definitions) {
   canvas.width = result.width;
   canvas.height = result.height;
   const context = canvas.getContext("2d");
   context.putImageData(new ImageData(result.rgba, result.width, result.height), 0, 0);
-  const x = result.width / 2;
-  const y = result.height / 2;
-  const alpha = Math.max(0.16, 0.58 * Math.max(0, 1 - Math.abs(offsetMm) / 12));
-  context.strokeStyle = `rgb(98 240 167 / ${alpha})`;
-  context.lineWidth = 2;
-  context.setLineDash(Math.abs(offsetMm) > 0.5 ? [6, 5] : []);
-  context.beginPath();
-  context.moveTo(x - 14, y);
-  context.lineTo(x + 14, y);
-  context.moveTo(x, y - 14);
-  context.lineTo(x, y + 14);
-  context.stroke();
-  context.beginPath();
-  context.arc(x, y, 7, 0, Math.PI * 2);
-  context.stroke();
-  context.setLineDash([]);
+  const projected = projectPointToMprPixel(result, request, point);
+  for (const definition of definitions) {
+    if (definition === currentDefinition) continue;
+    const controlsHorizontalCoordinate =
+      Math.abs(dot3(definition.normal, result.plane.u))
+      >= Math.abs(dot3(definition.normal, result.plane.v));
+    const coordinate = controlsHorizontalCoordinate ? projected.x : projected.y;
+    const limit = controlsHorizontalCoordinate ? result.width : result.height;
+    if (coordinate < 0 || coordinate > limit - 1) continue;
+    drawCrosshairLine(context, {
+      vertical: controlsHorizontalCoordinate,
+      coordinate,
+      width: result.width,
+      height: result.height,
+      color: definition.color,
+    });
+  }
+  if (
+    projected.x >= 0 && projected.x <= result.width - 1
+    && projected.y >= 0 && projected.y <= result.height - 1
+  ) {
+    context.strokeStyle = "rgb(255 255 255 / 0.92)";
+    context.lineWidth = 1.5;
+    context.beginPath();
+    context.arc(projected.x, projected.y, 5, 0, Math.PI * 2);
+    context.stroke();
+  }
+}
+
+function drawCrosshairLine(context, { vertical, coordinate, width, height, color }) {
+  const draw = () => {
+    context.beginPath();
+    if (vertical) {
+      context.moveTo(coordinate, 0);
+      context.lineTo(coordinate, height);
+    } else {
+      context.moveTo(0, coordinate);
+      context.lineTo(width, coordinate);
+    }
+    context.stroke();
+  };
+  context.strokeStyle = "rgb(0 0 0 / 0.72)";
+  context.lineWidth = 4;
+  draw();
+  context.strokeStyle = color;
+  context.lineWidth = 1.5;
+  draw();
+}
+
+export function projectPointToMprPixel(result, request, point) {
+  const relative = point.map((value, index) => value - result.plane.center[index]);
+  return {
+    x: (result.width - 1) / 2 + dot3(relative, result.plane.u) / request.spacingU,
+    y: (result.height - 1) / 2 + dot3(relative, result.plane.v) / request.spacingV,
+  };
 }
 
 export function calculateSliceOffsetRange(metadata, target, normal) {

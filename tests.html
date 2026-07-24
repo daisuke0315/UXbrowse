@@ -20,7 +20,7 @@
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
       import { ThreeSceneManager, calculateRequiredCameraFar, calculateRequiredCameraNear, isPointBehindDisplayPlane, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=validation-marker-plane-depth";
       import { dot, length } from "./src/math3d.js";
-      import { buildTargets, calculateSliceOffsetRange, calculateValidationError } from "./src/validation/ValidationController.js?v=transparent-target-1";
+      import { buildTargets, calculateSliceOffsetRange, calculateValidationError, projectPointToMprPixel } from "./src/validation/ValidationController.js?v=linked-mpr-crosshair";
 
       const lines = [];
       function assert(name, condition, details = "") {
@@ -56,6 +56,22 @@
       assert("UT-303 validation slice range", close(sliceRange.min, -4) && close(sliceRange.max, 2));
       const overriddenTarget = buildTargets(metadata, [{ target_id: "target-1", voxel_fraction: [0.5, 0.5, 0.5] }], { "target-1": [1, 2, 3] })[0];
       assert("UT-304 validation target override", overriddenTarget.xyz.every((value, index) => close(value, [1, 2, 3][index])));
+      const projectedCrosshair = projectPointToMprPixel({
+        width: 101,
+        height: 101,
+        plane: {
+          center: [10, 20, 30],
+          u: [1, 0, 0],
+          v: [0, 1, 0],
+        },
+      }, {
+        spacingU: 2,
+        spacingV: 4,
+      }, [20, 12, 35]);
+      assert(
+        "UT-305 linked MPR crosshair projection",
+        close(projectedCrosshair.x, 55) && close(projectedCrosshair.y, 48),
+      );
 
       const data = new Int16Array(8);
       for (let i = 0; i < data.length; i += 1) data[i] = i;
