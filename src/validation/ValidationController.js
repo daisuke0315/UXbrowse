@@ -582,18 +582,9 @@ export class ValidationController {
       : 0;
     this.els.averageError.textContent = trials.length ? `${average.toFixed(1)} mm` : "-";
     const fragment = document.createDocumentFragment();
-    for (const [index, trial] of trials.entries()) {
+    for (const trial of trials) {
       const card = document.createElement("article");
       card.className = "validation-result-card";
-      card.tabIndex = 0;
-      card.setAttribute("role", "button");
-      card.setAttribute("aria-label", `${trial.condition === "mpr" ? "MPR条件" : "提案ビューア条件"}をモデル上で確認`);
-      card.addEventListener("click", () => this.selectResultTrial(index));
-      card.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        this.selectResultTrial(index);
-      });
 
       const header = document.createElement("header");
       const condition = document.createElement("strong");
@@ -644,21 +635,8 @@ export class ValidationController {
       fragment.append(card);
     }
     this.els.resultList.replaceChildren(fragment);
-    if (trials.length) this.selectResultTrial(0);
-  }
-
-  selectResultTrial(index) {
-    const trials = this.session?.trials?.filter((trial) => trial.status === "completed") ?? [];
-    const trial = trials[index];
-    if (!trial) return;
-    for (const [cardIndex, card] of [...this.els.resultList.children].entries()) {
-      const selected = cardIndex === index;
-      card.classList.toggle("is-selected", selected);
-      card.setAttribute("aria-pressed", String(selected));
-    }
-    this.getScene().showValidationResult(trial.target_xyz_mm, trial.answer_xyz_mm);
-    this.els.resultViewerCondition.textContent =
-      trial.condition === "mpr" ? `MPR条件 · ${this.isPractice ? "練習" : "試行"} ${trial.sequence_no}` : `提案ビューア条件 · ${this.isPractice ? "練習" : "試行"} ${trial.sequence_no}`;
+    this.els.resultViewerCondition.textContent = "MPR・提案ビューアの2条件を同時表示";
+    this.getScene().showValidationResults(trials);
   }
 
   showOnly(name) {

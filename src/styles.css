@@ -1577,14 +1577,24 @@ body.validation-active .controls-pane {
   box-shadow: 0 0 10px currentColor;
 }
 
-.validation-result-viewer-guide i.is-target {
+.validation-result-viewer-guide i.is-mpr-target {
   background: #62f0a7;
   color: #62f0a7;
 }
 
-.validation-result-viewer-guide i.is-answer {
+.validation-result-viewer-guide i.is-mpr-answer {
   background: #ffb45e;
   color: #ffb45e;
+}
+
+.validation-result-viewer-guide i.is-proposal-target {
+  background: #59a8ff;
+  color: #59a8ff;
+}
+
+.validation-result-viewer-guide i.is-proposal-answer {
+  background: #f38bdc;
+  color: #f38bdc;
 }
 
 .validation-result-viewer-guide small {
@@ -1639,21 +1649,6 @@ body.validation-active .controls-pane {
   border: 1px solid rgb(126 231 239 / 0.16);
   border-radius: 14px;
   background: #09151b;
-  cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
-}
-
-.validation-result-card:hover,
-.validation-result-card:focus-visible {
-  border-color: rgb(126 231 239 / 0.46);
-  outline: none;
-}
-
-.validation-result-card.is-selected {
-  border-color: #7ee7ef;
-  background: #10232c;
-  box-shadow: 0 0 0 1px rgb(126 231 239 / 0.18);
-  transform: translateY(-1px);
 }
 
 .validation-result-card > header strong {

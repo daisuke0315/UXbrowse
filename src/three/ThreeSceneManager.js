@@ -579,35 +579,46 @@ export class ThreeSceneManager {
     }
   }
 
-  showValidationResult(targetDicomPoint, answerDicomPoint) {
+  showValidationResults(trials) {
     this.clearValidationMarkers();
-    this.validationTargetMarker = this.createValidationMarker(targetDicomPoint, 0x62f0a7, 1.2, {
-      opacity: 0.94,
-      depthTest: true,
-      label: "正",
-      name: "validation-result-target",
-    });
-    this.validationTargetXrayMarker = this.createValidationMarker(targetDicomPoint, 0x62f0a7, 1.2, {
-      opacity: 0.3,
-      depthTest: false,
-      destinationScene: this.validationOverlayScene,
-      label: "正",
-      name: "validation-result-target-xray",
-    });
-    this.validationAnswerMarker = this.createValidationMarker(answerDicomPoint, 0xffb45e, 1.05, {
-      opacity: 0.94,
-      depthTest: true,
-      label: "答",
-      name: "validation-result-answer",
-    });
-    this.validationAnswerXrayMarker = this.createValidationMarker(answerDicomPoint, 0xffb45e, 1.05, {
-      opacity: 0.3,
-      depthTest: false,
-      destinationScene: this.validationOverlayScene,
-      label: "答",
-      name: "validation-result-answer-xray",
-    });
+    this.validationResultMarkers = [];
+    const styles = {
+      mpr: {
+        target: { color: 0x62f0a7, scale: 1, label: "M正", labelOffset: [-62, -48] },
+        answer: { color: 0xffb45e, scale: 1, label: "M答", labelOffset: [-62, 48] },
+      },
+      proposal: {
+        target: { color: 0x59a8ff, scale: 1, label: "P正", labelOffset: [62, -48] },
+        answer: { color: 0xf38bdc, scale: 1, label: "P答", labelOffset: [62, 48] },
+      },
+    };
+    for (const trial of trials ?? []) {
+      const style = styles[trial.condition];
+      if (!style) continue;
+      this.addValidationResultPoint(trial.target_xyz_mm, style.target, `${trial.condition}-target`);
+      this.addValidationResultPoint(trial.answer_xyz_mm, style.answer, `${trial.condition}-answer`);
+    }
     this.requestRender();
+  }
+
+  addValidationResultPoint(dicomPoint, style, name) {
+    const visible = this.createValidationMarker(dicomPoint, style.color, style.scale, {
+      opacity: 0.96,
+      depthTest: true,
+      label: style.label,
+      labelOffset: style.labelOffset,
+      name: `validation-result-${name}`,
+    });
+    const xray = this.createValidationMarker(dicomPoint, style.color, style.scale, {
+      opacity: 0.3,
+      depthTest: false,
+      destinationScene: this.validationOverlayScene,
+      label: style.label,
+      labelOffset: style.labelOffset,
+      name: `validation-result-${name}-xray`,
+    });
+    if (visible) this.validationResultMarkers.push(visible);
+    if (xray) this.validationResultMarkers.push(xray);
   }
 
   getValidationInitialAnswerPoint() {
@@ -624,33 +635,57 @@ export class ThreeSceneManager {
     destinationScene = this.scene,
     name = "validation-marker",
     label = "",
+    labelOffset = null,
   } = {}) {
     if (!this.mapper || !this.scene) return null;
     const point = this.mapper.dicomPointToThree(dicomPoint);
     const markerCanvas = document.createElement("canvas");
-    markerCanvas.width = 128;
-    markerCanvas.height = 128;
+    const hasCallout = Array.isArray(labelOffset);
+    const canvasSize = hasCallout ? 256 : 128;
+    const center = canvasSize / 2;
+    markerCanvas.width = canvasSize;
+    markerCanvas.height = canvasSize;
     const context = markerCanvas.getContext("2d");
     const cssColor = `#${color.toString(16).padStart(6, "0")}`;
     context.strokeStyle = cssColor;
     context.fillStyle = "rgba(4, 12, 16, 0.7)";
     context.lineWidth = 8;
     context.beginPath();
-    context.arc(64, 64, 30, 0, Math.PI * 2);
+    context.arc(center, center, hasCallout ? 18 : 30, 0, Math.PI * 2);
     context.fill();
     context.stroke();
-    if (label) {
+    if (label && hasCallout) {
+      const labelX = center + labelOffset[0];
+      const labelY = center + labelOffset[1];
+      context.lineWidth = 5;
+      context.beginPath();
+      context.moveTo(center, center);
+      context.lineTo(labelX, labelY);
+      context.stroke();
+      context.fillStyle = "rgba(4, 12, 16, 0.88)";
+      context.strokeStyle = cssColor;
+      context.lineWidth = 5;
+      context.beginPath();
+      context.roundRect(labelX - 34, labelY - 23, 68, 46, 12);
+      context.fill();
+      context.stroke();
       context.fillStyle = cssColor;
-      context.font = "800 54px system-ui, sans-serif";
+      context.font = "800 29px system-ui, sans-serif";
       context.textAlign = "center";
       context.textBaseline = "middle";
-      context.fillText(label, 64, 67);
+      context.fillText(label, labelX, labelY + 1);
+    } else if (label) {
+      context.fillStyle = cssColor;
+      context.font = `800 ${label.length > 1 ? 34 : 54}px system-ui, sans-serif`;
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(label, center, center + 3);
     } else {
       context.beginPath();
-      context.moveTo(12, 64);
-      context.lineTo(116, 64);
-      context.moveTo(64, 12);
-      context.lineTo(64, 116);
+      context.moveTo(12, center);
+      context.lineTo(canvasSize - 12, center);
+      context.moveTo(center, 12);
+      context.lineTo(center, canvasSize - 12);
       context.stroke();
     }
     const texture = new this.THREE.CanvasTexture(markerCanvas);
@@ -663,7 +698,8 @@ export class ThreeSceneManager {
       toneMapped: false,
     }));
     const markerSize = (this.hasSceneContentBounds ? Math.max(10, this.sceneContentSphere.radius * 0.1) : 24) * scale;
-    marker.scale.set(markerSize, markerSize, 1);
+    const canvasScale = hasCallout ? 2 : 1;
+    marker.scale.set(markerSize * canvasScale, markerSize * canvasScale, 1);
     marker.position.set(...point);
     marker.renderOrder = 1000;
     marker.name = name;
@@ -879,6 +915,18 @@ export class ThreeSceneManager {
   clearValidationMarkers() {
     this.clearValidationTarget();
     this.clearValidationAnswer();
+    this.clearValidationResultMarkers();
+  }
+
+  clearValidationResultMarkers() {
+    for (const marker of this.validationResultMarkers ?? []) {
+      marker.parent?.remove(marker);
+      marker.geometry?.dispose?.();
+      marker.material.map?.dispose?.();
+      marker.material.dispose();
+    }
+    this.validationResultMarkers = [];
+    this.requestRender();
   }
 
   disposeValidationMarker(property) {

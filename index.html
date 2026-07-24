@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ViewSync</title>
-    <link rel="stylesheet" href="./src/styles.css?v=validation-observation-time-1">
+    <link rel="stylesheet" href="./src/styles.css?v=validation-dual-result-markers-1">
   </head>
   <body>
     <div id="startupLoading" class="startup-loading" role="status" aria-live="polite" aria-label="デモデータを読み込んでいます">
@@ -512,10 +512,12 @@
               </div>
             </div>
             <div class="validation-result-viewer-guide">
-              <strong id="validationResultViewerCondition">試行を選択</strong>
-              <span><i class="is-target"></i>正解位置</span>
-              <span><i class="is-answer"></i>回答位置</span>
-              <small>結果カードを選択して比較 · モデルは回転／ズームできます</small>
+              <strong id="validationResultViewerCondition">2条件を同時表示</strong>
+              <span><i class="is-mpr-target"></i>MPR正解</span>
+              <span><i class="is-mpr-answer"></i>MPR回答</span>
+              <span><i class="is-proposal-target"></i>提案正解</span>
+              <span><i class="is-proposal-answer"></i>提案回答</span>
+              <small>モデルは回転／ズームできます。重なる点は大きさを変えて表示します。</small>
             </div>
             <div id="validationResultList" class="validation-result-list"></div>
           </section>
@@ -544,6 +546,6 @@
       <pre id="diagnosticsOutput" hidden></pre>
     </main>
 
-    <script type="module" src="./src/main.js?v=validation-observation-time-2"></script>
+    <script type="module" src="./src/main.js?v=validation-dual-result-callouts-1"></script>
   </body>
 </html>
