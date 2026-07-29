@@ -48,6 +48,16 @@ const DEMO_DATASETS = Object.freeze({
     mhaUrl: "./data/banana/volume_preprocessed.mha.gz?v=model-bounds-1",
     mhaFallbackUrl: "./data/banana/volume_preprocessed.model-bounds.mha?v=model-bounds-1",
   },
+  all: {
+    id: "all",
+    name: "all",
+    mprDistance: 300,
+    modelFileName: "all.glb",
+    volumeFileName: "all-volume.mha",
+    glbUrl: "./data/all/all.glb?v=1",
+    mhaUrl: "./data/all/volume_preprocessed.model-bounds.mha?v=model-bounds-1",
+    mhaCompressed: false,
+  },
 });
 const STARTUP_DEMO = DEMO_DATASETS.mikan;
 // MPRキャンバスは読影用の正表示を維持し、Three.js重畳面で生じる
@@ -86,12 +96,10 @@ const els = {
   fileInput: document.querySelector("#fileInput"),
   folderInput: document.querySelector("#folderInput"),
   mhaInput: document.querySelector("#mhaInput"),
-  objInput: document.querySelector("#objInput"),
   glbInput: document.querySelector("#glbInput"),
-  glbFolderInput: document.querySelector("#glbFolderInput"),
-  textureInput: document.querySelector("#textureInput"),
   mikanDemoBtn: document.querySelector("#mikanDemoBtn"),
   bananaDemoBtn: document.querySelector("#bananaDemoBtn"),
+  allDemoBtn: document.querySelector("#allDemoBtn"),
   demoVolumeBtn: document.querySelector("#demoVolumeBtn"),
   statusText: document.querySelector("#statusText"),
   fileMenu: document.querySelector(".file-menu"),
@@ -179,12 +187,10 @@ logger.subscribe(() => {
 els.fileInput.addEventListener("change", () => runManualFromFileMenu(() => handleFiles(els.fileInput.files)));
 els.folderInput.addEventListener("change", () => runManualFromFileMenu(() => handleFiles(els.folderInput.files)));
 els.mhaInput.addEventListener("change", () => runManualFromFileMenu(() => handleMhaFile(els.mhaInput.files?.[0])));
-els.objInput.addEventListener("change", () => runManualFromFileMenu(() => handleObjFile(els.objInput.files?.[0])));
 els.glbInput.addEventListener("change", () => runManualFromFileMenu(() => handleGlbFile(els.glbInput.files?.[0])));
-els.glbFolderInput.addEventListener("change", () => runManualFromFileMenu(() => handleGlbFolder(els.glbFolderInput.files)));
-els.textureInput.addEventListener("change", () => runManualFromFileMenu(() => handleTextureFile(els.textureInput.files?.[0])));
 els.mikanDemoBtn.addEventListener("click", () => loadDemoFromToolbar(DEMO_DATASETS.mikan));
 els.bananaDemoBtn.addEventListener("click", () => loadDemoFromToolbar(DEMO_DATASETS.banana));
+els.allDemoBtn.addEventListener("click", () => loadDemoFromToolbar(DEMO_DATASETS.all));
 els.demoVolumeBtn.addEventListener("click", () => runManualFromFileMenu(loadDemoVolume));
 document.addEventListener("pointerdown", (event) => {
   if (els.fileMenu.open && !els.fileMenu.contains(event.target)) {
@@ -284,7 +290,11 @@ function loadDemoFromToolbar(demo) {
 }
 
 function setActiveDemoButton(demoId) {
-  for (const [id, button] of [["mikan", els.mikanDemoBtn], ["banana", els.bananaDemoBtn]]) {
+  for (const [id, button] of [
+    ["mikan", els.mikanDemoBtn],
+    ["banana", els.bananaDemoBtn],
+    ["all", els.allDemoBtn],
+  ]) {
     button.classList.toggle("is-active", id === demoId);
     button.setAttribute("aria-pressed", String(id === demoId));
   }
@@ -344,6 +354,7 @@ function toggleObservationLock() {
   els.controlsToggleBtn.disabled = locking;
   els.mikanDemoBtn.disabled = locking;
   els.bananaDemoBtn.disabled = locking;
+  els.allDemoBtn.disabled = locking;
   setContainerControlsLocked(els.controlsPane, locking);
   els.observationLockBtn.setAttribute("aria-pressed", String(locking));
   els.observationLockBtn.setAttribute("aria-label", locking ? "観察モードを解除" : "現在の状態をロック");
@@ -444,27 +455,6 @@ async function handleMhaFile(file) {
   }
 }
 
-async function handleObjFile(file) {
-  if (!file) return;
-  if (!state.threeReady || !state.threeScene) {
-    logger.error("OBJ読込失敗", { message: "Three.jsが初期化されていません" });
-    return;
-  }
-  try {
-    els.statusText.textContent = `${file.name} を読込中...`;
-    await state.threeScene.loadObjFile(file, getObjOptions());
-    clearDemoPhantomForModel();
-    els.statusText.textContent = `OBJ読込完了: ${file.name}`;
-    requestObjectLinkedMpr("obj-file");
-    writeDiagnostics();
-  } catch (error) {
-    logger.error("OBJ読込失敗", { fileName: file.name, message: error.message });
-    els.statusText.textContent = `OBJ読込失敗: ${error.message}`;
-  } finally {
-    els.objInput.value = "";
-  }
-}
-
 async function handleGlbFile(file) {
   if (!file) return;
   if (!state.threeReady || !state.threeScene) {
@@ -484,48 +474,6 @@ async function handleGlbFile(file) {
     els.statusText.textContent = `GLB読込失敗: ${error.message}`;
   } finally {
     els.glbInput.value = "";
-  }
-}
-
-async function handleGlbFolder(fileList) {
-  const files = [...(fileList ?? [])];
-  if (!files.length) return;
-  if (!state.threeReady || !state.threeScene) {
-    logger.error("GLB＋テクスチャ読込失敗", { message: "Three.jsが初期化されていません" });
-    return;
-  }
-  try {
-    els.statusText.textContent = `GLB＋テクスチャを読込中... (${files.length}ファイル)`;
-    const summary = await state.threeScene.loadGlbFileSet(files, getObjOptions());
-    clearDemoPhantomForModel();
-    els.statusText.textContent = `GLB＋テクスチャ読込完了: ${summary.fileName}`;
-    requestObjectLinkedMpr("glb-folder");
-    writeDiagnostics();
-  } catch (error) {
-    logger.error("GLB＋テクスチャ読込失敗", { message: error.message });
-    els.statusText.textContent = `GLB＋テクスチャ読込失敗: ${error.message}`;
-  } finally {
-    els.glbFolderInput.value = "";
-  }
-}
-
-async function handleTextureFile(file) {
-  if (!file) return;
-  if (!state.threeReady || !state.threeScene) {
-    logger.error("テクスチャ適用失敗", { message: "Three.jsが初期化されていません" });
-    return;
-  }
-  try {
-    els.statusText.textContent = `${file.name} をテクスチャとして適用中...`;
-    const summary = await state.threeScene.applyTextureFile(file);
-    els.statusText.textContent = `テクスチャ適用完了: ${file.name}`;
-    logger.info("モデルへテクスチャを適用しました", summary);
-    writeDiagnostics();
-  } catch (error) {
-    logger.error("テクスチャ適用失敗", { fileName: file.name, message: error.message });
-    els.statusText.textContent = `テクスチャ適用失敗: ${error.message}`;
-  } finally {
-    els.textureInput.value = "";
   }
 }
 
@@ -822,23 +770,29 @@ async function loadBundledDemo(demo, { startup = false } = {}) {
     // 先にモデルの描画機会を作り、その後に大容量CTを読み込む。
     await new Promise((resolve) => requestAnimationFrame(resolve));
     let mhaBuffer;
-    try {
-      updateStartupLoading(demo, "ct", "圧縮CTデータを読み込んでいます...");
+    if (demo.mhaCompressed === false) {
+      updateStartupLoading(demo, "ct", "CTデータを読み込んでいます...");
       els.statusText.textContent = `${demo.name}デモのCTを読込中...`;
-      const compressedMhaBuffer = await fetchArrayBuffer(demo.mhaUrl);
-      if (token !== state.startupDemoToken) return;
-      updateStartupLoading(demo, "ct", "CTデータをバックグラウンドで展開しています...");
-      els.statusText.textContent = `${demo.name}デモのCTを展開中...`;
-      mhaBuffer = await decompressGzipArrayBuffer(compressedMhaBuffer);
-    } catch (compressedError) {
-      if (token !== state.startupDemoToken) return;
-      logger.warn("圧縮CTを利用できないため非圧縮データへ切り替えます", {
-        demo: demo.id,
-        message: compressedError.message,
-      });
-      updateStartupLoading(demo, "ct", "互換モードでCTデータを読み込んでいます...");
-      els.statusText.textContent = `${demo.name}デモのCTを互換モードで読込中...`;
-      mhaBuffer = await fetchArrayBuffer(demo.mhaFallbackUrl);
+      mhaBuffer = await fetchArrayBuffer(demo.mhaUrl);
+    } else {
+      try {
+        updateStartupLoading(demo, "ct", "圧縮CTデータを読み込んでいます...");
+        els.statusText.textContent = `${demo.name}デモのCTを読込中...`;
+        const compressedMhaBuffer = await fetchArrayBuffer(demo.mhaUrl);
+        if (token !== state.startupDemoToken) return;
+        updateStartupLoading(demo, "ct", "CTデータをバックグラウンドで展開しています...");
+        els.statusText.textContent = `${demo.name}デモのCTを展開中...`;
+        mhaBuffer = await decompressGzipArrayBuffer(compressedMhaBuffer);
+      } catch (compressedError) {
+        if (token !== state.startupDemoToken) return;
+        logger.warn("圧縮CTを利用できないため非圧縮データへ切り替えます", {
+          demo: demo.id,
+          message: compressedError.message,
+        });
+        updateStartupLoading(demo, "ct", "互換モードでCTデータを読み込んでいます...");
+        els.statusText.textContent = `${demo.name}デモのCTを互換モードで読込中...`;
+        mhaBuffer = await fetchArrayBuffer(demo.mhaFallbackUrl);
+      }
     }
     if (token !== state.startupDemoToken) return;
     state.volume = mhaLoader.parse(mhaBuffer, demo.volumeFileName);

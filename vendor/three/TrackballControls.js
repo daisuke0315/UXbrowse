@@ -501,7 +501,10 @@ class TrackballControls extends Controls {
 
 			if ( this.object.isPerspectiveCamera ) {
 
-				this._eye.multiplyScalar( factor );
+				// 透視投影ではFOVや注視点までの距離を変えず、カメラと
+				// 回転中心を視線方向へ一緒に移動する。モデル内部を通過して
+				// 前後に観察できるよう、固定した回転中心でのドリーにはしない。
+				this.target.addScaledVector( this._eye, factor - 1 );
 
 			} else if ( this.object.isOrthographicCamera ) {
 
@@ -527,7 +530,8 @@ class TrackballControls extends Controls {
 
 				if ( this.object.isPerspectiveCamera ) {
 
-					this._eye.multiplyScalar( factor );
+					// ホイール／ドラッグでもタッチ操作と同じ前後移動にする。
+					this.target.addScaledVector( this._eye, factor - 1 );
 
 				} else if ( this.object.isOrthographicCamera ) {
 

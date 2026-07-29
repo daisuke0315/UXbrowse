@@ -20,7 +20,7 @@ export class ThreeCameraController {
     const forward = this.tmpForward.set(0, 0, -1).applyQuaternion(this.camera.quaternion).normalize();
     // ViewSync MPRの正規仕様:
     // MPRのtargetはOrbitControlsの回転中心ではなく、カメラ前方の固定距離点。
-    // ズームでcamera.positionが変わるとtargetも動き、MPR断面位置が更新される。
+    // 前後移動でcamera.positionが変わるとtargetも動き、MPR断面位置が更新される。
     this.tmpTarget.copy(this.tmpEye).addScaledVector(forward, targetDistance);
     const target = vecToArray(this.tmpTarget);
     const up = vecToArray(this.tmpUp.set(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize());

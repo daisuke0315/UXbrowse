@@ -30,7 +30,7 @@ export class ThreeSceneManager {
   async init() {
     const start = performance.now();
     this.THREE = await import("../../vendor/three/three.module.js");
-    const { TrackballControls } = await import("../../vendor/three/TrackballControls.js?v=screen-space-pan-1");
+    const { TrackballControls } = await import("../../vendor/three/TrackballControls.js?v=forward-navigation-1");
     const { OBJLoader } = await import("../../vendor/three/OBJLoader.js");
     const { GLTFLoader } = await import("../../vendor/three/GLTFLoader.js");
     this.OBJLoader = OBJLoader;
