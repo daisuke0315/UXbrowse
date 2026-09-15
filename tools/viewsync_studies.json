@@ -1,0 +1,20 @@
+{
+  "viewerUrl": "http://127.0.0.1:5173/",
+  "studies": {
+    "1.2.826.0.1.3680043.10.543.1001": {
+      "available": true,
+      "dataset": "mikan",
+      "label": "ViewSyncデータあり（みかんデモ）"
+    },
+    "1.2.826.0.1.3680043.10.543.1002": {
+      "available": true,
+      "dataset": "banana",
+      "label": "ViewSyncデータあり（バナナデモ）"
+    },
+    "1.2.826.0.1.3680043.10.543.1003": {
+      "available": false,
+      "dataset": "mikan",
+      "label": "ViewSyncデータなし"
+    }
+  }
+}

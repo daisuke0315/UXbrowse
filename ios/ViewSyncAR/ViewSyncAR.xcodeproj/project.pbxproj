@@ -1,0 +1,270 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* ViewSyncARApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ViewSyncARApp.swift */; };
+		A10000000000000000000002 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* AppModel.swift */; };
+		A10000000000000000000003 /* TrackingState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* TrackingState.swift */; };
+		A10000000000000000000004 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* ContentView.swift */; };
+		A10000000000000000000005 /* ARViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* ARViewContainer.swift */; };
+		A10000000000000000000006 /* CenterRayRegistrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* CenterRayRegistrationService.swift */; };
+		A10000000000000000000008 /* ViewSyncARCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* ViewSyncARCoordinator.swift */; };
+		A10000000000000000000010 /* MHAVolume.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* MHAVolume.swift */; };
+		A10000000000000000000012 /* ViewSyncDataset.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* ViewSyncDataset.swift */; };
+		A10000000000000000000013 /* volume_preprocessed.model-bounds.mha in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* volume_preprocessed.model-bounds.mha */; };
+		A10000000000000000000014 /* 260108-3-runtime.usdz in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* 260108-3-runtime.usdz */; };
+		A10000000000000000000015 /* model-coordinate.json in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* model-coordinate.json */; };
+		A10000000000000000000016 /* 260911.referenceobject in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* 260911.referenceobject */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* ViewSyncARApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewSyncARApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* TrackingState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingState.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* ARViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARViewContainer.swift; sourceTree = "<group>"; };
+		A20000000000000000000006 /* CenterRayRegistrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CenterRayRegistrationService.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 /* ViewSyncARCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewSyncARCoordinator.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000010 /* ViewSyncAR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ViewSyncAR.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000012 /* MHAVolume.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MHAVolume.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 /* GLBLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GLBLoader.swift; sourceTree = "<group>"; };
+		A20000000000000000000014 /* ViewSyncDataset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewSyncDataset.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* volume_preprocessed.model-bounds.mha */ = {isa = PBXFileReference; lastKnownFileType = file; name = "volume_preprocessed.model-bounds.mha"; path = "../../data/260911/volume_preprocessed.model-bounds.mha"; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000016 /* 260108-3-runtime.usdz */ = {isa = PBXFileReference; lastKnownFileType = file.usdz; name = "260108-3-runtime.usdz"; path = "../../data/260911/260108-3-runtime.usdz"; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000017 /* model-coordinate.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "model-coordinate.json"; path = "../../data/260911/model-coordinate.json"; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000018 /* 260911.referenceobject */ = {isa = PBXFileReference; explicitFileType = file; name = "260911.referenceobject"; path = "../../data/260911/260911.referenceobject"; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A30000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A40000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A40000000000000000000002 /* ViewSyncAR */,
+				A40000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A40000000000000000000002 /* ViewSyncAR */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* ViewSyncARApp.swift */,
+				A20000000000000000000002 /* AppModel.swift */,
+				A20000000000000000000003 /* TrackingState.swift */,
+				A20000000000000000000004 /* ContentView.swift */,
+				A20000000000000000000005 /* ARViewContainer.swift */,
+				A20000000000000000000006 /* CenterRayRegistrationService.swift */,
+				A20000000000000000000008 /* ViewSyncARCoordinator.swift */,
+				A20000000000000000000012 /* MHAVolume.swift */,
+				A20000000000000000000013 /* GLBLoader.swift */,
+				A20000000000000000000014 /* ViewSyncDataset.swift */,
+				A20000000000000000000009 /* Info.plist */,
+				A20000000000000000000015 /* volume_preprocessed.model-bounds.mha */,
+				A20000000000000000000016 /* 260108-3-runtime.usdz */,
+				A20000000000000000000017 /* model-coordinate.json */,
+				A20000000000000000000018 /* 260911.referenceobject */,
+			);
+			path = ViewSyncAR;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000010 /* ViewSyncAR.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* ViewSyncAR */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A90000000000000000000002 /* Build configuration list for PBXNativeTarget "ViewSyncAR" */;
+			buildPhases = (
+				A60000000000000000000001 /* Sources */,
+				A30000000000000000000001 /* Frameworks */,
+				A70000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ViewSyncAR;
+			productName = ViewSyncAR;
+			productReference = A20000000000000000000010 /* ViewSyncAR.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A80000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					A50000000000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = A90000000000000000000001 /* Build configuration list for PBXProject "ViewSyncAR" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A40000000000000000000001;
+			productRefGroup = A40000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A50000000000000000000001 /* ViewSyncAR */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A70000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000013 /* volume_preprocessed.model-bounds.mha in Resources */,
+				A10000000000000000000014 /* 260108-3-runtime.usdz in Resources */,
+				A10000000000000000000015 /* model-coordinate.json in Resources */,
+				A10000000000000000000016 /* 260911.referenceobject in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A60000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* ViewSyncARApp.swift in Sources */,
+				A10000000000000000000002 /* AppModel.swift in Sources */,
+				A10000000000000000000003 /* TrackingState.swift in Sources */,
+				A10000000000000000000004 /* ContentView.swift in Sources */,
+				A10000000000000000000005 /* ARViewContainer.swift in Sources */,
+				A10000000000000000000006 /* CenterRayRegistrationService.swift in Sources */,
+				A10000000000000000000008 /* ViewSyncARCoordinator.swift in Sources */,
+				A10000000000000000000010 /* MHAVolume.swift in Sources */,
+				A10000000000000000000012 /* ViewSyncDataset.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		B10000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B10000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B10000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3M9J2H74PP;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ViewSyncAR/Info.plist;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.viewsync.ViewSyncAR;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B10000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 3M9J2H74PP;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ViewSyncAR/Info.plist;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.viewsync.ViewSyncAR;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A90000000000000000000001 /* Build configuration list for PBXProject "ViewSyncAR" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10000000000000000000001 /* Debug */,
+				B10000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A90000000000000000000002 /* Build configuration list for PBXNativeTarget "ViewSyncAR" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10000000000000000000003 /* Debug */,
+				B10000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A80000000000000000000001 /* Project object */;
+}

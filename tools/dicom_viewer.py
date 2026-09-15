@@ -3,14 +3,15 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
 import pydicom
-from PyQt6.QtCore import QEvent, QPoint, Qt, QTimer
-from PyQt6.QtGui import QAction, QImage, QInputDevice, QKeySequence, QPainter, QPen, QPixmap
+from PyQt6.QtCore import QEvent, QPoint, Qt, QTimer, QUrl
+from PyQt6.QtGui import QAction, QDesktopServices, QImage, QInputDevice, QKeySequence, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -20,6 +21,7 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QProgressDialog,
@@ -32,6 +34,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from viewsync_link import ViewSyncLink, ViewSyncRegistry, build_viewer_url
 
 
 def number(value, default: float) -> float:
@@ -144,10 +148,21 @@ class ImageView(QLabel):
         super().resizeEvent(event)
         self.window.render_image()
 
+    def contextMenuEvent(self, event) -> None:
+        menu = QMenu(self)
+        action = menu.addAction("ViewSyncで表示")
+        action.setEnabled(self.window.view_sync_action.isEnabled())
+        action.setToolTip(self.window.view_sync_action.toolTip())
+        action.triggered.connect(self.window.open_view_sync)
+        menu.exec(event.globalPos())
+
 
 class DicomViewer(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, registry: ViewSyncRegistry, demo_dataset: str | None = None) -> None:
         super().__init__()
+        self.registry = registry
+        self.demo_dataset = demo_dataset
+        self.current_view_sync_link: ViewSyncLink | None = None
         self.datasets: list[pydicom.Dataset] = []
         self.source_paths: list[Path] = []
         self.series_groups: dict[str, list[tuple[Path, pydicom.Dataset]]] = {}
@@ -167,7 +182,7 @@ class DicomViewer(QMainWindow):
         self.tag_timer.setSingleShot(True)
         self.tag_timer.setInterval(250)
         self.tag_timer.timeout.connect(self._populate_pending_tags)
-        self.setWindowTitle("ViewSync DICOM Viewer")
+        self.setWindowTitle("PSP Mock Viewer")
         self.resize(1180, 780)
         self._build_ui()
 
@@ -191,6 +206,10 @@ class DicomViewer(QMainWindow):
         self._action(toolbar, "縮小 −", lambda: self.zoom_active(1 / 1.25), QKeySequence("-"))
         self._action(toolbar, "拡大 ＋", lambda: self.zoom_active(1.25), QKeySequence("+"))
         self._action(toolbar, "等倍", self.reset_active_zoom, QKeySequence("0"))
+        toolbar.addSeparator()
+        self.view_sync_action = self._action(toolbar, "ViewSyncで表示 ↗", self.open_view_sync)
+        self.view_sync_action.setEnabled(False)
+        self.view_sync_action.setToolTip("CTを読み込むと利用可否を確認します")
 
         self.views = {
             "axial": ImageView(self, "axial"),
@@ -236,6 +255,13 @@ class DicomViewer(QMainWindow):
 
         right = QWidget()
         right_layout = QVBoxLayout(right)
+        self.patient_label = QLabel("患者ID: —")
+        self.study_label = QLabel("Study UID: —")
+        self.view_sync_status_label = QLabel("ViewSync: CTを読み込んでください")
+        self.view_sync_status_label.setStyleSheet("color:#7f8c8d;font-weight:600;")
+        right_layout.addWidget(self.patient_label)
+        right_layout.addWidget(self.study_label)
+        right_layout.addWidget(self.view_sync_status_label)
         right_layout.addWidget(QLabel("十字座標ログ"))
         self.coordinate_log = QPlainTextEdit()
         self.coordinate_log.setReadOnly(True)
@@ -253,12 +279,13 @@ class DicomViewer(QMainWindow):
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("十字中心を左ドラッグ: 十字追従  その他を左ドラッグ: パン  ホイール: 断面移動  ピンチ: ズーム")
 
-    def _action(self, toolbar: QToolBar, text: str, callback, shortcut=None) -> None:
+    def _action(self, toolbar: QToolBar, text: str, callback, shortcut=None) -> QAction:
         action = QAction(text, self)
         action.triggered.connect(callback)
         if shortcut:
             action.setShortcut(shortcut)
         toolbar.addAction(action)
+        return action
 
     def open_files(self) -> None:
         names, _ = QFileDialog.getOpenFileNames(self, "DICOMファイルを選択", "", "DICOM (*.dcm *.dicom);;すべて (*)")
@@ -337,6 +364,8 @@ class DicomViewer(QMainWindow):
         finally:
             QApplication.restoreOverrideCursor()
 
+        self.update_view_sync_state()
+
         self.current_pixels = None
         if not self.build_volume():
             return
@@ -361,6 +390,42 @@ class DicomViewer(QMainWindow):
         self.show_slice(self.slider.value())
         self.log_focus("series")
         self.statusBar().showMessage(f"シリーズを読み込みました：{len(self.datasets)}枚")
+
+    def update_view_sync_state(self) -> None:
+        if not self.datasets:
+            self.current_view_sync_link = None
+            self.view_sync_action.setEnabled(False)
+            return
+        header = self.datasets[0]
+        patient_id = str(getattr(header, "PatientID", "—")) or "—"
+        study_uid = str(getattr(header, "StudyInstanceUID", ""))
+        self.patient_label.setText(f"患者ID: {patient_id}")
+        self.study_label.setText(f"Study UID: {study_uid or '—'}")
+        link = self.registry.find(study_uid)
+        if link is None and self.demo_dataset:
+            link = ViewSyncLink(study_uid or "psp-mock-study", self.demo_dataset, "開発用デモ指定")
+        self.current_view_sync_link = link
+        available = link is not None
+        self.view_sync_action.setEnabled(available)
+        if available:
+            self.view_sync_action.setToolTip("表示中の検査をViewSyncで開きます")
+            self.view_sync_status_label.setText(f"ViewSync: 利用可能 · {link.label}")
+            self.view_sync_status_label.setStyleSheet("color:#0f9d8a;font-weight:700;")
+        else:
+            reason = "この検査ではViewSync用画像が取得されていません"
+            self.view_sync_action.setToolTip(reason)
+            self.view_sync_status_label.setText(f"ViewSync: 利用不可 · {reason}")
+            self.view_sync_status_label.setStyleSheet("color:#7f8c8d;font-weight:600;")
+
+    def open_view_sync(self) -> None:
+        link = self.current_view_sync_link
+        if link is None:
+            return
+        url = build_viewer_url(self.registry.viewer_url, link)
+        if not QDesktopServices.openUrl(QUrl(url)):
+            QMessageBox.warning(self, "ViewSyncを開けません", f"既定ブラウザでURLを開けませんでした。\n\n{url}")
+            return
+        self.statusBar().showMessage("ViewSyncを外部ブラウザで開きました", 5000)
 
     def build_volume(self) -> bool:
         """Decode the selected series into a volume required by linked MPR views."""
@@ -484,7 +549,7 @@ class DicomViewer(QMainWindow):
         for orientation, pixels in images.items():
             self.render_view(self.views[orientation], pixels, crosses[orientation])
         index = z + 1
-        self.setWindowTitle(f"ViewSync DICOM Viewer — {index}/{len(self.datasets)} — WL {self.level:.0f} / WW {self.width:.0f}")
+        self.setWindowTitle(f"PSP Mock Viewer — {index}/{len(self.datasets)} — WL {self.level:.0f} / WW {self.width:.0f}")
 
     def render_view(self, view: ImageView, pixels: np.ndarray, cross: tuple[int, int]) -> None:
         low = self.level - self.width / 2.0
@@ -666,12 +731,36 @@ class DicomViewer(QMainWindow):
         self.render_image()
 
 
+def argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="PSP連携フローを検証するDICOMビューアモック")
+    parser.add_argument("dicom_folder", nargs="?", type=Path, help="PSPから渡されるDICOM保存フォルダ")
+    parser.add_argument(
+        "--registry",
+        type=Path,
+        default=Path(__file__).with_name("viewsync_studies.json"),
+        help="Study Instance UIDとViewSyncデータの対応表",
+    )
+    parser.add_argument("--viewsync-url", help="対応表のviewerUrlを一時的に上書き")
+    parser.add_argument("--demo-dataset", choices=("mikan", "banana", "all"), help="開発時だけ可否判定を上書き")
+    return parser
+
+
 def main() -> int:
-    app = QApplication(sys.argv)
-    app.setApplicationName("ViewSync DICOM Viewer")
+    args = argument_parser().parse_args()
+    registry = ViewSyncRegistry.from_file(args.registry)
+    if args.viewsync_url:
+        registry.viewer_url = args.viewsync_url
+    app = QApplication([sys.argv[0]])
+    app.setApplicationName("PSP Mock Viewer")
     app.setStyle("Fusion")
-    window = DicomViewer()
+    window = DicomViewer(registry, args.demo_dataset)
     window.show()
+    if args.dicom_folder:
+        if not args.dicom_folder.is_dir():
+            QMessageBox.warning(window, "フォルダが見つかりません", str(args.dicom_folder))
+        else:
+            paths = [path for path in args.dicom_folder.rglob("*") if path.is_file()]
+            QTimer.singleShot(0, lambda: window.load_paths(paths))
     return app.exec()
 
 

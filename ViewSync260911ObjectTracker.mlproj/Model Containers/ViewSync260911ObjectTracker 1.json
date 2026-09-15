@@ -1,0 +1,131 @@
+{
+  "activityEntities" : [
+    "experimentCreated",
+    [
+      {
+        "createdDate" : "2026-09-11T08:49:40Z",
+        "event" : "experimentCreated",
+        "id" : "A4205CC7-EA24-44EC-9E36-10B8CB81AB16",
+        "subtitle" : "ViewSync260911ObjectTracker 1",
+        "title" : "Model Source Created"
+      }
+    ]
+  ],
+  "contentDataResult" : {
+
+  },
+  "createdDate" : "2026-09-11T08:49:40Z",
+  "evaluationContainerEntity" : {
+    "createdDate" : "2026-09-11T08:49:40Z",
+    "evaluationEntities" : [
+
+    ],
+    "id" : "8bf2db23-1469-481a-9244-770684e731c1",
+    "modifiedDate" : "2026-09-11T08:49:40Z",
+    "previewType" : "unknown",
+    "testingEvaluationEntity" : {
+      "analysedDataType" : "none",
+      "createdDate" : "2026-09-11T08:49:40Z",
+      "dataResult" : {
+
+      },
+      "id" : "279f6dbf-7a8a-47c3-bd51-c705eaadf7ab"
+    },
+    "trainingEvaluationEntity" : {
+      "analysedDataType" : "none",
+      "createdDate" : "2026-09-11T08:49:40Z",
+      "dataResult" : {
+
+      },
+      "id" : "bc979509-36ae-49d1-bf5f-82df90ce0521"
+    },
+    "validationEvaluationEntity" : {
+      "analysedDataType" : "none",
+      "createdDate" : "2026-09-11T08:49:40Z",
+      "dataResult" : {
+
+      },
+      "id" : "5955c4fb-f3fa-402f-ba54-d89558fb6b45"
+    }
+  },
+  "evaluationEntity" : {
+    "analysedDataType" : "none",
+    "dataResult" : {
+
+    },
+    "id" : "c0d49681-a6d2-4231-a0f4-7fe53fc29583"
+  },
+  "evaluationState" : "uninitialized",
+  "id" : "9E307064-90BD-4DE2-8F2C-25F87FBD157C",
+  "modelEntity" : {
+    "createdDate" : "2026-09-11T08:49:40Z",
+    "experimentID" : "9E307064-90BD-4DE2-8F2C-25F87FBD157C",
+    "id" : "36BBC338-CBD9-4582-9CEF-B8E22765C445",
+    "modifiedDate" : "2026-09-11T08:49:40Z",
+    "title" : "",
+    "version" : "1.0"
+  },
+  "modifiedDate" : "2026-09-11T08:49:40Z",
+  "preferredFilename" : "ViewSync260911ObjectTracker 1",
+  "settingEntity" : {
+    "algorithmType" : "maxEnt",
+    "augmentations" : [
+
+    ],
+    "featureNames" : [
+
+    ],
+    "handActionClassifierAugmentations" : [
+
+    ],
+    "handPoseClassifierAugmentations" : [
+
+    ],
+    "harVideoAugmentations" : 0,
+    "known3DObjectTrackerExcludesBacksideViews" : false,
+    "known3DObjectTrackerExcludesBottomViews" : true,
+    "known3DObjectTrackerIsGravityAligned" : true,
+    "known3DObjectTrackerNegativeObjectDataSourceIDs" : [
+
+    ],
+    "seedType" : "default",
+    "styleTransferAlgorithmType" : "image",
+    "taskType" : "known3DObjectTracker",
+    "transferLearningEmbeddingType" : "dynamic"
+  },
+  "snapshotRole" : {
+    "withoutSnapshots" : 0
+  },
+  "state" : "uninitialized",
+  "title" : "ViewSync260911ObjectTracker 1",
+  "trainingEntity" : {
+    "analysedDataType" : "choose",
+    "checkpointMetrics" : {
+
+    },
+    "dataResult" : {
+
+    },
+    "featureExtractionCheckpointMayBeAvailable" : false,
+    "progress" : [
+
+    ],
+    "snapshottableCheckpoints" : {
+
+    }
+  },
+  "validationEntity" : {
+    "analysedDataType" : "auto",
+    "dataResult" : {
+
+    },
+    "splitOptions" : {
+      "strategy" : {
+        "automatic" : {
+
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

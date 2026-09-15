@@ -12,6 +12,7 @@ import { ThreeCameraController } from "./three/ThreeCameraController.js";
 import { ThreeDicomCoordinateMapper } from "./three/ThreeDicomCoordinateMapper.js";
 import { DynamicMprController, constrainDicomInputToPlane } from "./three/DynamicMprController.js?v=fixed-mpr-plane-2";
 import { MprUpdateScheduler } from "./three/MprUpdateScheduler.js";
+import { resolveViewSyncLaunchContext } from "./ViewSyncLaunchContext.js";
 
 const logger = new ValidationLogger();
 const loader = new DicomLoader(logger);
@@ -58,8 +59,19 @@ const DEMO_DATASETS = Object.freeze({
     mhaUrl: "./data/all/volume_preprocessed.model-bounds.mha?v=model-bounds-1",
     mhaCompressed: false,
   },
+  "260911": {
+    id: "260911",
+    name: "260911",
+    mprDistance: 300,
+    modelFileName: "260108-3.glb",
+    volumeFileName: "260911-volume.mha",
+    glbUrl: "./data/260911/260108-3.glb?v=1",
+    mhaUrl: "./data/260911/volume_preprocessed.model-bounds.mha.gz?v=1",
+    mhaFallbackUrl: "./data/260911/volume_preprocessed.model-bounds.mha?v=1",
+  },
 });
-const STARTUP_DEMO = DEMO_DATASETS.mikan;
+const launchContext = resolveViewSyncLaunchContext(window.location.search, DEMO_DATASETS, "mikan");
+const STARTUP_DEMO = launchContext.dataset;
 // MPRキャンバスは読影用の正表示を維持し、Three.js重畳面で生じる
 // CanvasTexture／裏面表示のU/V差だけをtexture座標で補正する。
 // The PiP monitor previews the actual overlay texture; only V is flipped by default.
@@ -100,6 +112,7 @@ const els = {
   mikanDemoBtn: document.querySelector("#mikanDemoBtn"),
   bananaDemoBtn: document.querySelector("#bananaDemoBtn"),
   allDemoBtn: document.querySelector("#allDemoBtn"),
+  dataset260911DemoBtn: document.querySelector("#dataset260911DemoBtn"),
   demoVolumeBtn: document.querySelector("#demoVolumeBtn"),
   statusText: document.querySelector("#statusText"),
   fileMenu: document.querySelector(".file-menu"),
@@ -173,8 +186,10 @@ const els = {
   debugInfo: document.querySelector("#debugInfo"),
   logOutput: document.querySelector("#logOutput"),
   diagnosticsOutput: document.querySelector("#diagnosticsOutput"),
+  linkedStudyBadge: document.querySelector("#linkedStudyBadge"),
 };
 
+updateLaunchContextUi();
 createVectorInputs("eye", state.defaults.eye);
 createVectorInputs("target", state.defaults.target);
 createVectorInputs("up", state.defaults.up);
@@ -190,7 +205,8 @@ els.mhaInput.addEventListener("change", () => runManualFromFileMenu(() => handle
 els.glbInput.addEventListener("change", () => runManualFromFileMenu(() => handleGlbFile(els.glbInput.files?.[0])));
 els.mikanDemoBtn.addEventListener("click", () => loadDemoFromToolbar(DEMO_DATASETS.mikan));
 els.bananaDemoBtn.addEventListener("click", () => loadDemoFromToolbar(DEMO_DATASETS.banana));
-els.allDemoBtn.addEventListener("click", () => loadDemoFromToolbar(DEMO_DATASETS.all));
+els.allDemoBtn?.addEventListener("click", () => loadDemoFromToolbar(DEMO_DATASETS.all));
+els.dataset260911DemoBtn.addEventListener("click", () => loadDemoFromToolbar(DEMO_DATASETS["260911"]));
 els.demoVolumeBtn.addEventListener("click", () => runManualFromFileMenu(loadDemoVolume));
 document.addEventListener("pointerdown", (event) => {
   if (els.fileMenu.open && !els.fileMenu.contains(event.target)) {
@@ -294,7 +310,9 @@ function setActiveDemoButton(demoId) {
     ["mikan", els.mikanDemoBtn],
     ["banana", els.bananaDemoBtn],
     ["all", els.allDemoBtn],
+    ["260911", els.dataset260911DemoBtn],
   ]) {
+    if (!button) continue;
     button.classList.toggle("is-active", id === demoId);
     button.setAttribute("aria-pressed", String(id === demoId));
   }
@@ -306,6 +324,14 @@ function cancelStartupDemo() {
   state.startupDemoLoading = false;
   hideStartupLoading();
   logger.info("手動読込を優先し、初期デモの読込を中止しました");
+}
+
+function updateLaunchContextUi() {
+  if (!els.linkedStudyBadge || !launchContext.fromPspMock || !launchContext.studyKey) return;
+  els.linkedStudyBadge.hidden = false;
+  els.linkedStudyBadge.textContent = `PSP連携 · Study ${launchContext.studyKey}`;
+  els.linkedStudyBadge.title = `PSP Mock Viewerから検査 ${launchContext.studyKey} を開きました`;
+  document.title = `ViewSync · ${launchContext.studyKey}`;
 }
 
 function updateStartupLoading(demo, step, detail) {
@@ -354,7 +380,8 @@ function toggleObservationLock() {
   els.controlsToggleBtn.disabled = locking;
   els.mikanDemoBtn.disabled = locking;
   els.bananaDemoBtn.disabled = locking;
-  els.allDemoBtn.disabled = locking;
+  if (els.allDemoBtn) els.allDemoBtn.disabled = locking;
+  els.dataset260911DemoBtn.disabled = locking;
   setContainerControlsLocked(els.controlsPane, locking);
   els.observationLockBtn.setAttribute("aria-pressed", String(locking));
   els.observationLockBtn.setAttribute("aria-label", locking ? "観察モードを解除" : "現在の状態をロック");
@@ -807,6 +834,9 @@ async function loadBundledDemo(demo, { startup = false } = {}) {
     requestLinkedMpr(`demo-${demo.id}`);
     setActiveDemoButton(demo.id);
     els.statusText.textContent = `${demo.name}デモ読込完了`;
+    if (launchContext.fromPspMock && launchContext.studyKey) {
+      els.statusText.textContent = `${demo.name} · PSP連携検査 ${launchContext.studyKey}`;
+    }
     logger.info("デモデータを読み込みました", {
       demo: demo.id,
       glb: demo.glbUrl,

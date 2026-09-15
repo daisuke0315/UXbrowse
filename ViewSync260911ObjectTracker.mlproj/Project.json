@@ -1,0 +1,29 @@
+{
+  "activityEntities" : [
+    "projectCreated",
+    [
+      {
+        "createdDate" : "2026-09-11T08:49:40Z",
+        "event" : "projectCreated",
+        "id" : "06C47C79-D50F-485B-862B-0B60DD79AA88",
+        "subtitle" : "ViewSync260911ObjectTracker",
+        "title" : "Project Created"
+      }
+    ]
+  ],
+  "authorName" : "Daisuke Tanii",
+  "createdDate" : "2026-09-11T08:49:40Z",
+  "description" : "3D digital twin tracking model for the ViewSync 260911 dataset. Source coordinate transform is recorded in model-coordinate.json.",
+  "id" : "6D599346-6809-4129-A737-C2C83880C94F",
+  "license" : "",
+  "location" : "",
+  "modifiedDate" : "2026-09-11T08:49:40Z",
+  "projectName" : "ViewSync260911ObjectTracker",
+  "settingsEntity" : {
+    "snapshotOnExtendTraining" : true,
+    "snapshotOnResumeTraining" : false
+  },
+  "taskType" : "known3DObjectTracker",
+  "title" : "Object Tracking",
+  "version" : "1.1"
+}

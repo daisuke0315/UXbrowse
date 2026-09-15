@@ -15,6 +15,11 @@ data/banana/*
 !data/banana/banana.glb
 !data/banana/volume_preprocessed.mha.gz
 !data/banana/volume_preprocessed.model-bounds.mha
+!data/260911/
+data/260911/*
+!data/260911/260108-3.glb
+!data/260911/volume_preprocessed.model-bounds.mha.gz
+!data/260911/volume_preprocessed.model-bounds.mha
 
 # Runtime and editor artifacts.
 node_modules/

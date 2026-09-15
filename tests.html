@@ -20,6 +20,7 @@
       import { ThreeDicomCoordinateMapper } from "./src/three/ThreeDicomCoordinateMapper.js";
       import { ThreeSceneManager, calculateRequiredCameraFar, calculateRequiredCameraNear, resolveLocalGltfResource } from "./src/three/ThreeSceneManager.js?v=double-sided-depth";
       import { dot, length } from "./src/math3d.js";
+      import { resolveViewSyncLaunchContext } from "./src/ViewSyncLaunchContext.js";
 
       const lines = [];
       function assert(name, condition, details = "") {
@@ -128,6 +129,13 @@
       });
       assert("UT-127 photogrammetry material is double-sided", fakeMesh.material.side === 2);
       assert("UT-128 opaque model keeps depth", fakeMesh.material.transparent === false && fakeMesh.material.depthTest === true && fakeMesh.material.depthWrite === true);
+
+      const launchDatasets = { mikan: { id: "mikan" }, banana: { id: "banana" } };
+      const linkedLaunch = resolveViewSyncLaunchContext("?dataset=banana&study=1.2.3&source=psp-mock", launchDatasets, "mikan");
+      assert("UT-130 PSP launch selects dataset", linkedLaunch.dataset.id === "banana");
+      assert("UT-131 PSP launch accepts safe study key", linkedLaunch.studyKey === "1.2.3" && linkedLaunch.fromPspMock);
+      const unsafeLaunch = resolveViewSyncLaunchContext("?dataset=unknown&study=%3Cscript%3E", launchDatasets, "mikan");
+      assert("UT-132 PSP launch falls back safely", unsafeLaunch.dataset.id === "mikan" && unsafeLaunch.studyKey === "" && unsafeLaunch.usedFallback);
 
       const mhaLoader = new MhaLoader();
       const shortMha = createMhaBuffer({
