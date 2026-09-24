@@ -3,3 +3,16 @@ __pycache__/
 tests/__pycache__/
 output/
 output_colmap_image/
+.model_cache/
+.aliked_cache/
+**/.aliked_cache/
+**/.view_retrieval_cache/
+output_splat_audit/
+output_3dgs_reference_views_72_geometry_v2/
+output_3dgs_reference_views_72_ray_v2/
+output_3dgs_reference_views_72_geometry_new/
+output_3dgs_reference_views_72_upper_v1/
+output_3dgs_reference_views_72_upper_negz_v1/
+output_3dgs_reference_views_72_upper_negz_v2/
+output_3dgs_reference_views_72_uniform_negz_v1/
+output_3dgs_queries_24_negz_v1/

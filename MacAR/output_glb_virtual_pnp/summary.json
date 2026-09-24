@@ -1,0 +1,112 @@
+{
+  "query": "/Users/daisuketanii/Downloads/IMG_2532.jpeg",
+  "glb": "/Users/daisuketanii/Documents/GitHub/UXbrowse/data/260911/260108-3.glb",
+  "coordinate_system": "GLB source coordinates (millimeters for dataset 260911)",
+  "matching": "SIFT retrieval + ALIKED + LightGlue + Fundamental RANSAC",
+  "best": {
+    "reference": "view_0006.png",
+    "status": "REJECT",
+    "rvec": [
+      -0.644703610728605,
+      0.8388735741196705,
+      -1.94467258812613
+    ],
+    "tvec": [
+      519.3746407648657,
+      -346.9938767522388,
+      805.0418614011522
+    ],
+    "camera_center_glb": [
+      -149.4987561836605,
+      214.45164897440063,
+      -984.838960811925
+    ],
+    "pnp_inliers": 14,
+    "pnp_inlier_ratio": 0.5,
+    "mean_reprojection_error": 2.9134892357359954,
+    "reference_azimuth_deg": 270.0,
+    "reference_elevation_deg": 0.0
+  },
+  "evaluations": [
+    {
+      "rank": 1,
+      "image_name": "view_0000.png",
+      "sift_ratio_matches": 215,
+      "query_keypoints": 2048,
+      "reference_keypoints": 2048,
+      "lightglue_matches": 2,
+      "geometric_inliers": 2,
+      "xyz_correspondences": 2,
+      "pnp_inliers": 0,
+      "pnp_inlier_ratio": 0.0,
+      "mean_reprojection_error": null,
+      "elapsed_ms": 3578.1993750000006,
+      "status": "FAIL",
+      "detail": "PnP could not estimate a pose"
+    },
+    {
+      "rank": 2,
+      "image_name": "view_0003.png",
+      "sift_ratio_matches": 195,
+      "query_keypoints": 2048,
+      "reference_keypoints": 2048,
+      "lightglue_matches": 98,
+      "geometric_inliers": 34,
+      "xyz_correspondences": 34,
+      "pnp_inliers": 12,
+      "pnp_inlier_ratio": 0.35294117647058826,
+      "mean_reprojection_error": 3.2300428212879244,
+      "elapsed_ms": 1010.5333749999996,
+      "status": "REJECT",
+      "detail": "quality gate failed"
+    },
+    {
+      "rank": 3,
+      "image_name": "view_0006.png",
+      "sift_ratio_matches": 165,
+      "query_keypoints": 2048,
+      "reference_keypoints": 2048,
+      "lightglue_matches": 68,
+      "geometric_inliers": 28,
+      "xyz_correspondences": 28,
+      "pnp_inliers": 14,
+      "pnp_inlier_ratio": 0.5,
+      "mean_reprojection_error": 2.9134892357359954,
+      "elapsed_ms": 723.1282080000021,
+      "status": "REJECT",
+      "detail": "quality gate failed"
+    },
+    {
+      "rank": 4,
+      "image_name": "view_0001.png",
+      "sift_ratio_matches": 154,
+      "query_keypoints": 2048,
+      "reference_keypoints": 2048,
+      "lightglue_matches": 32,
+      "geometric_inliers": 14,
+      "xyz_correspondences": 14,
+      "pnp_inliers": 5,
+      "pnp_inlier_ratio": 0.35714285714285715,
+      "mean_reprojection_error": 3.1608018905021433,
+      "elapsed_ms": 445.37220900000204,
+      "status": "REJECT",
+      "detail": "quality gate failed"
+    },
+    {
+      "rank": 5,
+      "image_name": "view_0007.png",
+      "sift_ratio_matches": 109,
+      "query_keypoints": 2048,
+      "reference_keypoints": 2048,
+      "lightglue_matches": 42,
+      "geometric_inliers": 16,
+      "xyz_correspondences": 16,
+      "pnp_inliers": 6,
+      "pnp_inlier_ratio": 0.375,
+      "mean_reprojection_error": 2.5871295504081733,
+      "elapsed_ms": 432.42054199999916,
+      "status": "REJECT",
+      "detail": "quality gate failed"
+    }
+  ]
+}

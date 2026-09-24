@@ -1,0 +1,7 @@
+# Optional learned local-feature stack. Base SIFT mode does not require these.
+torch>=2.0,<3
+torchvision>=0.15,<1
+kornia>=0.7,<1
+lightglue @ https://github.com/cvg/LightGlue/archive/refs/heads/main.zip
+trimesh>=4,<5
+pyrender>=0.1,<0.2
