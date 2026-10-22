@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ViewSync Live</title><link rel="stylesheet" href="/styles.css"></head>
+<body><header><div><b>ViewSync</b><span> LIVE / CT / 3DGS</span></div><span class="tag">研究・検証用</span><span id="connection">接続中…</span></header>
+<main><aside>
+<h2>入力・照合設定</h2>
+<a class="preprocessing-link" href="/preprocess" target="_blank" rel="noopener">登録実写の前処理・特徴点／XYZを確認 ↗</a>
+<label>入力<select id="input_source"><option value="camera">ライブカメラ（動画）</option><option value="photo">高解像度写真（1枚を照合）</option></select></label>
+<div id="photoInputs" hidden><label>写真を選択（JPEG・PNG）<input id="photoFile" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png"></label><p id="photoInfo">元解像度で表示・測定します。JPEGの撮影方向を反映します。</p><label>写真の特徴抽出サイズ<select id="photo_feature_size"><option value="1024" selected>1024 px · 標準（推奨）</option><option value="1600">1600 px · 細部比較</option><option value="2048">2048 px · 細部比較／負荷増</option></select></label><p>対象検出・粗検索だけ幅1280 px以下で解析します。ALIKEDは元写真の対象cropを指定サイズへ調整し、点の位置・PnP判定・CT測定は元写真の座標で扱います。高精細設定が常に高精度・高速とは限りません。PASS後は固定してCT重畳・測定できます。写真と動画で画角が異なる場合は、写真に対応した校正値／HFOVを指定してください。</p></div>
+<label>照合データ<select id="mode"><option value="registered" selected>登録実写 · ALIKED（推奨／ライブCT重畳）</option><option value="gs">3DGS仮想画像 · ALIKED（比較）</option></select></label>
+<p id="matchingInfo">3DGSで粗い視点を選び、登録実写の特徴と照合します。XYZは実写の多視点三角測量によるものです。PASS中はCT/MPRをリアルタイム重畳し、ロスト時は非表示。「固定して測定」で表示ずれを確認できます。</p>
+<label>3DGS参照画像<select id="referencePreset" aria-label="3DGS参照画像"></select></label>
+<p>元参照がデフォルト。アルファ1.5は比較用です。登録実写では粗検索、3DGS方式では粗検索と局所照合に使います。停止中に選択し、次の開始から反映します。</p>
+<section class="map-selection"><label>登録実写の地図<input id="map_path" readonly title="使用する地図フォルダ"></label><div class="row"><button type="button" data-picker="map_path">地図ファイルを選択…</button><button type="button" id="recommendedMap">推奨地図に戻す</button></div><p id="mapSelectionInfo">同じ登録データの幾何監査合格済み地図から、XYZ付与率の高い保存結果を自動選択します。</p></section>
+<div id="registeredSearchOptions"><label>登録実写の探索<select id="registered_search_policy"><option value="adaptive" selected>段階探索：確かな姿勢なら早期終了（推奨）</option><option value="exhaustive">全候補を照合：従来方式との比較</option></select></label><p>粗検索1位の実写1〜2枚から開始。2枚で十分な点数・分布・低誤差と姿勢一致を確認できなければ、残りの候補にも広げます。面除外の検証は常に全候補を処理。追跡中の姿勢ベース補充は変更しません。</p></div>
+<div class="row"><label>カメラ番号<input id="camera" type="number" min="0" value="1"></label><label>候補 view 数<input id="top_k" type="number" min="1" max="10" value="3"></label></div>
+<div id="gsMatchingOptions"><label>共通：3DGSの粗いview選択<select id="coarse_method"><option value="dino-patch">全体Top-10 → パッチ配置＋方向分散（試験）</option><option value="dino-global">従来：全体特徴の類似度のみ</option></select></label>
+<p>両モードで同じ対象crop・view選択を使います。実写側は各viewに近い登録写真を最大2枚照合します。写真がFAILの場合は最大10 viewへ一度拡張します。パッチ再順位付けだけでは姿勢は確定しません。</p>
+<label>共通：ライブの対応点更新<select id="refresh_policy"><option value="background">追跡優先・バックグラウンド継続補充</option><option value="orbit-experimental">周回追跡・復帰強化（実験／精度未確認）</option><option value="coverage">従来方式：必要時の補充＋周期全体探索</option></select></label>
+<p>同じ視点でも負荷に応じた待機を挟んで補充します。点が少ないときや視点変化は優先し、同時1件。登録実写は近傍ALIKED点検索に、既知姿勢で選ぶ実写2枚までのLightGlue照合を挟み、別領域も補充します。DINO再検索はしません。仮想画像モードは近傍viewを照合。遅れた結果は最新画像まで追跡転送し、PnP/QC後のみ統合します。</p></div>
+<label class="check"><input id="mpr" type="checkbox" checked> CT / MPRを読み込む</label>
+<details><summary>登録データ・校正ファイル</summary><label>3DGS reference folder<input id="views_path" readonly></label><button type="button" data-picker="views_path">3DGS manifest.json を選択…</button><label>CT volume (.mha)<input id="volume_path" readonly></label><button type="button" data-picker="volume_path">CTファイルを選択…</button><label>座標 metadata (.json)<input id="coordinates_path" readonly></label><button type="button" data-picker="coordinates_path">座標ファイルを選択…</button><label>カメラ校正 (.json / 任意)<input id="calibration_path" readonly placeholder="空欄：HFOV 72°の近似"></label><div class="row"><button type="button" data-picker="calibration_path">校正ファイルを選択…</button><button type="button" id="clearCalibration">校正なし</button></div><p>Macのファイル選択画面が開きます。地図・CTはこのMacで読み込み、ブラウザへファイル全体を転送しません。</p></details>
+<div class="row actions"><button id="start" class="primary">開始</button><button id="stop" disabled>停止</button></div>
+<details open><summary>精度・速度の設定（開始前）</summary>
+<label>判定設定<select id="quality_profile"><option value="standard">安定優先</option><option value="fast">速度優先 · 解像度だけ削減 / 2000点上限</option><option value="precision" selected>厳格判定 · 初期設定（ロストしやすい）</option></select></label>
+<label>処理解像度<select id="max_processing_width"><option value="1280">幅1280 · 標準速度</option><option value="1920">幅1920 · 高解像度 / 負荷増</option></select></label>
+<label>未校正時の近似HFOV（度）<input id="fov_deg" type="number" min="30" max="110" step="0.5" value="72"></label>
+<p>全設定で抽出・近傍照合・補充後の追跡上限は2000点です。実際の採用数は検出・照合・QCで決まり、2000点を保証しません。安定優先：8px / 平均6px・最低10採用点。追跡上限は30fps。視点補充では追跡悪化時に全体探索、1800フレームでも安全確認。厳格設定は90フレーム（上限換算約3秒）。周期探索の時間予算を維持しています。速度優先は解像度のみ1024→768px、細部の対応が減る場合があります。</p></details>
+<h2>特徴点・位置合わせの確認</h2>
+<label class="check"><input id="showInliers" type="checkbox" checked> 採用点 · 緑（PnP）</label>
+<label class="check"><input id="showOutliers" type="checkbox" checked> 除外点 · 赤 / QC未採用 · オレンジ</label>
+<label class="check"><input id="showResiduals" type="checkbox"> 再投影位置と誤差線 · 水色</label>
+<label class="check"><input id="showPointIds" type="checkbox"> 対応候補の番号</label>
+<label class="check"><input id="showModelBox" type="checkbox"> モデルの投影枠 · 黄色</label>
+<label>点の大きさ <output id="pointSizeValue">4 px</output><input id="pointSize" type="range" min="2" max="10" value="4"></label>
+<p id="pointLegend">点は実測された画像位置。水色は対応XYZの再投影位置。番号はこのフレームの候補番号で、永続POINT3D_IDではありません。</p>
+<h2>ユーティリティ</h2><div class="row"><button id="relocalize" disabled>全体を再探索</button><button id="diagnostic" disabled>診断保存</button></div>
+<div class="row utility"><button id="hideOverlays">重畳を隠す</button><button id="resetDisplay">表示をリセット</button></div>
+<label class="check"><input id="showSearch" type="checkbox" checked> ローカライズ進行状況・参照画像を表示</label>
+<h2>表示</h2>
+<label class="check"><input id="showMPR" type="checkbox" checked> CT / MPR断面を重畳表示</label>
+<p id="mprDisplayStatus" role="status">両モード共通：PASS中にリアルタイム重畳します。表示だけを切り替え、追跡は継続します。</p>
+<label>3DGSの表示<select id="layout"><option value="side">横に表示 · 推定カメラと一致</option><option value="overlay">ライブ画像に3DGSを重畳</option><option value="off">3DGSを隠す</option></select></label>
+<label>右側3DGSの操作<select id="gsViewMode"><option value="matched">推定カメラに追従</option><option value="orbit">自由視点 · ドラッグで回転</option></select></label>
+<label>3DGS透過 <output id="gsOpacityValue">50%</output><input id="gsOpacity" type="range" min="0" max="100" value="50"></label>
+<details open class="anatomy-controls"><summary>模擬腫瘍・血管デモ</summary>
+<button id="showAnatomyDemo">模擬デモを表示</button>
+<label>模擬データの表示<select id="anatomyMode"><option value="off">非表示（通常）</option><option value="transparent">半透明3D · 内部の全体像</option><option value="cutaway">切り進める3D · 手前を除去、奥を残す</option><option value="section">断面のみ · CTと同じ平面</option></select></label>
+<div class="anatomy-legend"><label class="check"><input id="anatomyTumor" type="checkbox" checked><span class="tumor-dot">●</span> 模擬腫瘍</label><label class="check"><input id="anatomyArtery" type="checkbox" checked><span class="artery-dot">●</span> 模擬動脈</label><label class="check"><input id="anatomyVein" type="checkbox" checked><span class="vein-dot">●</span> 模擬静脈</label></div>
+<label>模擬データの濃さ <output id="anatomyOpacityValue">65%</output><input id="anatomyOpacity" type="range" min="0" max="100" value="65"></label>
+<p id="anatomyStatus" role="status">模擬データ：非表示</p>
+<p>架空の腫瘍2個と分岐血管を黄色ボックスの内側に固定します。断面送り・カメラ移動に追従し、切り口は明るい色で表示。下のCT断面スライダーで切り進めてください。実CTから抽出した病変・血管ではなく、測定や診断には使えません。CTの濃さ・照合処理は変えません。</p>
+</details>
+<label class="check"><input id="cameraLinkedSlice" type="checkbox" checked disabled>カメラ移動で断面を送る（ViewSync連動）</label>
+<p>近づくと奥、離れると手前へ。断面はカメラ前方の一定距離に置きます。下のスライダーはその基準位置の調整です。</p>
+<label>CT手前からの断面距離 <output id="sliceValue">姿勢待ち</output><input id="slice" type="range" min="0" max="100" step="0.1" value="50" disabled></label>
+<div class="slice-direction"><span id="sliceNear">← 手前</span><span id="sliceFar">奥 →</span></div>
+<div class="row"><button data-slice-percent="0" disabled>手前</button><button data-slice-percent="50" disabled>中央</button><button data-slice-percent="100" disabled>奥</button></div>
+<div class="row utility"><button data-slice-step="-5" disabled>−5</button><button data-slice-step="-1" disabled>−1</button><button data-slice-step="1" disabled>＋1</button><button data-slice-step="5" disabled>＋5</button></div>
+<label class="check"><input id="sliceExtended" type="checkbox" disabled>CT範囲外まで送る（−100〜150%）</label>
+<p id="sliceStatus" role="status">姿勢確定後にCTの距離を表示します。</p>
+<p>左でカメラ側、右で奥側へ基準位置を調整。距離は現在の視線方向に沿うCTボリューム手前からの値です。±ボタンも同じ単位。対象物の表面からの距離ではありません。</p>
+<label>CT表示の濃さ（0＝非表示） <output id="opacityValue">82%</output><input id="opacity" type="range" min="0" max="100" value="82"></label>
+<label class="check"><input id="sliceMask" type="checkbox" checked disabled>黄色ボックスの手前部分で実写をマスク</label>
+<label>実写マスクの濃さ <output id="maskStrengthValue">45%</output><input id="maskStrength" type="range" min="0" max="80" value="45"></label>
+<p>黄色の3Dボックスを仮の対象形状として、断面より手前の部分の投影領域を半透明の灰色で覆います。CTの透過率は変えません。ボックス内の背景も覆う場合があります。「モデルの投影枠」で範囲を確認できます。</p>
+<label>拡大 <output id="zoomValue">1.0×</output><input id="zoom" type="range" min="1" max="12" step="0.1" value="1"></label>
+<button id="resetZoom">拡大をリセット</button>
+<h2>表示一致性の測定</h2><button id="openMeasurement" class="primary" disabled>拡大してライブ・CTのずれを測る</button><p>左右の専用画面で同じマーカーを選び、CT座標の距離で表示します。</p><div class="row"><button id="freeze">固定して測定</button><button id="resume" disabled>ライブに戻す</button></div>
+<label>クリックする点<select id="pointKind"><option value="live">① ライブ上のマーカー</option><option value="ct">② 同じマーカーのCT像</option><option value="distance">CT上の2点間距離</option></select></label>
+<p>固定後にクリック。最初の点を中心に拡大します。CT点は断面を送っても同じ3D位置に保持します。</p>
+<div class="row"><button id="clear">点を消す</button><button id="return">CT点の断面へ</button></div><button id="save">表示ずれをCSV保存</button>
+<p class="warning">PASSは臨床精度の保証ではありません。mm値はCT深度での横方向の表示ずれです。奥行き誤差・TREは測定しません。</p>
+</aside>
+<section class="workspace"><div id="notice" role="status">設定を確認して開始してください。</div><div id="error" role="alert" hidden></div>
+<div id="panels"><article id="livePanel"><div class="pane-title"><span id="liveTitle">カメラ / MPR</span><span id="poseBadge" class="tag">WAIT</span></div><div class="viewport" id="liveViewport"><div class="image-stack" id="stack"><canvas id="liveCanvas"></canvas><div id="gsOverlay"></div><canvas id="sliceMaskCanvas"></canvas><canvas id="mprCanvas"></canvas><canvas id="anatomyCanvas"></canvas><canvas id="featureCanvas"></canvas><canvas id="markers"></canvas></div><div class="empty" id="empty">カメラはPythonから取得します<br>「開始」を押してください</div></div></article>
+<article id="gsPanel"><div class="pane-title"><span id="gsTitle">3DGS · 同じ画像・同じ姿勢</span><span id="gsStatus">未読込</span></div><div class="viewport" id="gsViewport"><canvas id="gsCanvas"></canvas><div class="empty" id="gsEmpty">PASS後に推定カメラ視点で表示<br>GPU描画：目標30 fps</div></div></article></div>
+<section class="telemetry"><div id="metrics">映像待ち</div><div id="detail">3DGS描画fpsと、姿勢推定の更新頻度は別です。</div><div id="pointStats">対応点：画像待ち</div><div id="measurement">測定点：未選択</div></section>
+<section id="searchPanel" hidden aria-live="polite">
+<div class="search-main"><div class="search-status">
+<div class="search-heading"><b id="searchTitle">ローカライズ</b><span id="searchElapsed"></span></div>
+<div id="searchBar" class="search-bar"><span></span></div>
+<div id="searchSteps"><span data-step="0">① 検出 / view選択</span><span data-step="1">② ALIKED特徴</span><span data-step="2">③ 照合 / XYZ</span><span data-step="3">④ PnP / QC</span></div>
+<div id="searchDetail"></div><div id="searchQuality" hidden></div><div id="backgroundStatus" hidden></div><div id="diagnosticLog" hidden></div></div><div class="search-previews">
+<figure id="queryPreview" hidden><div><img id="searchImage" alt="探索開始時の入力画像"><canvas id="searchROI"></canvas></div><figcaption id="queryCaption">探索画像（現在の映像とは別）</figcaption></figure>
+<figure id="referencePreview" hidden><img id="referenceImage" alt="照合中の3DGS仮想画像"><figcaption id="referenceCaption"></figcaption></figure>
+</div></div><details class="search-extra"><summary>探索詳細・候補の順位</summary><div id="rerankDetail" hidden></div><div id="rerankTable" hidden></div><p>黄色枠は探索画像で検出したROI。候補viewは未確定の仮説で、確定した姿勢ではありません。</p></details></section>
+<details class="notes"><summary>使い方・表示の意味</summary><p>通常は「3DGS」を選び開始。姿勢確定すると右に同じ視点の3DGS、左にカメラとMPRが表示されます。「ライブ画像に重畳」で見比べられます。背景・ROI検出・特徴照合・PnPは従来のPython処理です。</p><p>登録実写モードでは、PnP結果の元フレームを表示します。最新映像へ古い姿勢を重ねません。CTは固定後のみ表示。表示画像の経過時間を必ず確認してください。近似カメラ内部パラメータ・仮想viewの近似XYZ・CTとの登録誤差はこのUIでは解消されません。</p></details>
+</section></main>
+<dialog id="measureDialog" aria-labelledby="measureTitle">
+<div class="measure-header"><div><h2 id="measureTitle">ライブ・CT マーカーの表示ずれ</h2><p>画像と姿勢を固定して測定中</p></div><button id="closeMeasurement">重畳画面へ戻る（固定維持）</button><button id="measureResume">ライブに戻す</button></div>
+<div class="measure-result"><div><span>CT深度の平面内距離</span><strong id="measureValue">—</strong><span id="measurePixels">左右で同じマーカーを指定</span></div><div><button id="measureSave" disabled>結果をCSVへ保存</button><button id="measureClear">2点を選び直す</button><p id="measureSaveStatus"></p></div></div>
+<label>検証方式 <select id="validationMode"><option value="occlusion" selected>任意領域の画像遮蔽</option><option value="face">面対応点の除外（従来の比較）</option></select></label>
+<label id="occlusionReferencePolicyLabel" hidden>遮蔽照合の参照 <select id="occlusionReferencePolicy"><option value="fresh_global" selected>粗検索からやり直す</option><option value="original">元PASS時の参照view／登録写真を固定</option></select><span id="occlusionOriginalViews"></span></label>
+<section id="occlusionTools" class="validation-measure-bar"><div><b>創部周辺の外観情報が失われた場合を検証</b><p id="occlusionHint">「領域を囲む」→左画像で頂点を順にクリック（3点以上）。ドラッグ・ホイールで拡大移動できます。</p><small id="occlusionPolicyHint">照合入力を灰色で遮蔽して、前後を独立に検出・粗検索・PnPします。測定時は元画像を表示。形状変化や内部露出は再現しません。</small></div><div><button id="occlusionDraw">領域を囲む</button><button id="occlusionUndo">1点戻す</button><button id="occlusionClear">領域をクリア</button><button id="occlusionRun" class="primary" disabled>遮蔽前後を最初から照合</button></div></section>
+<label id="validationReferencePolicyLabel" hidden>面除外の参照view <select id="validationReferencePolicy"><option value="original" selected>元PASS時の参照viewを固定</option><option value="rerank">Top-K再検索（診断）</option></select> <span id="validationOriginalViews"></span></label>
+<details id="validationCompare" class="validation-compare" hidden open><summary id="validationCompareSummary">面を除外して再照合（クリックで開閉）</summary><div class="validation-compare-body"><div class="validation-compare-actions"><button id="validationPickFace">左画像で面を選ぶ</button><label>検証用・平均再投影誤差上限 <output id="validationLimitValue">3.0 px</output><input id="validationLimit" type="range" min="0.5" max="12" step="0.1" value="3"></label><label>検証用・採用点の画像分布下限 <output id="validationCoverageValue">0.50%</output><input id="validationCoverage" type="range" min="0" max="2" step="0.01" value="0.5"></label><label id="validationViewsLabel">検証用・候補view数（3DGSのみ）<input id="validationViews" type="number" min="1" max="10" step="1" value="3"></label><button id="validationReprocess" disabled>この条件で面除外を再照合</button><small>ライブ運用の閾値は変更しません。RANSAC・必要点数・3D点の広がり判定は維持します。画像分布を緩めると不安定な姿勢もPASSし得ます。検証用でありCT位置精度の保証ではありません。</small></div><div class="validation-compare-results"><b>同じ画像で一面の対応点を除外して比較</b><p id="validationSelectedFace">除外する面：未選択</p><p id="validationCompareText">面選択を押し、左の対象物の面をクリックしてください。</p><div id="validationMetricCards" class="validation-metric-cards" hidden><div><b>全点</b><p id="validationBaselineStages"></p><p id="validationBaselineQuality"></p></div><div><b>面除外</b><p id="validationLatestStages"></p><p id="validationLatestQuality"></p><p id="validationFailureReason"></p></div></div><div id="validationCompareImages" class="validation-compare-images" hidden><figure><img id="validationBaselineImage" alt="基準画像"><figcaption>基準画像</figcaption></figure><figure><img id="validationLatestImage" alt="除外面の範囲プレビュー"><figcaption>灰：除外面 ／ 緑：PnP採用 ／ 橙：不採用の対応点</figcaption></figure></div><small>面内の2D対応だけを除外し、入力RGBは変えません。灰色画像は範囲確認用です。除外数は候補view合計で、同じ特徴が重複する場合があります。通常3DGSモードは同じview候補で全点・面除外を再探索します。登録実写モードの全点値は元の固定姿勢です。再投影誤差は画像上の誤差であり、CTとの実測ずれではありません。</small></div></div></details>
+<div id="validationMeasureBar" class="validation-measure-bar" hidden><span id="validationMeasureStatus"></span><button id="validationMeasureResult" class="primary" disabled>面除外後の姿勢でずれを測る</button></div>
+<p class="measure-help">クリックで仮選択 →「選択点を拡大」→ 確定。ドラッグで移動、ホイールでカーソル中心に拡大。画像にフォーカス中は矢印で0.25 px、Shift＋矢印で1 px微調整、Enterで確定。</p>
+<div class="measure-display-controls"><label class="check"><input id="measureSyncZoom" type="checkbox" checked>左右の拡大・移動をそろえる</label><label class="check"><input id="measureOverlay" type="checkbox"><span id="measureOverlayLabel">左のライブ画像にCTを重ねる</span></label><label class="measure-overlay-opacity">重ねるCTの濃さ <output id="measureOverlayOpacityValue">50%</output><input id="measureOverlayOpacity" type="range" min="0" max="100" value="50" disabled></label><span>黄：LIVE点 ／ 紫：CT点</span></div>
+<div id="measureError" role="alert" hidden></div>
+<div id="measurePanes"></div>
+<div class="measure-slice"><label>CT断面を送ってマーカーを探す <output id="measureSliceValue"></output><input id="measureSlice" type="range" min="0" max="100" step="0.1"></label><div class="row"><button data-measure-step="-5">−5</button><button data-measure-step="-1">−1</button><button data-measure-step="1">＋1</button><button data-measure-step="5">＋5</button><button id="measureReturn">CT点の断面へ</button></div><p id="measureSliceStatus"></p><p id="measureOffset"></p></div>
+<details><summary>CT座標・測定の意味</summary><p id="measureCoordinates"></p><p>ライブのクリック位置を、CTマーカーと同じ深さの平面に投影して、CT物理座標で2点の距離を計算します。表示上の横方向のずれを測る値で、ライブマーカーの実際の奥行きの誤差は含みません。拡大は表示だけを変え、測定値は元の画像座標とCT座標から計算します。</p></details>
+</dialog>
+<div id="fileWarning" hidden>このHTMLを直接開いてもPythonへ接続できません。VS Codeの「MacAR: Browser Live (3DGS + MPR)」をF5で起動し、表示された http://127.0.0.1:… を開いてください。</div><script>if(location.protocol==='file:'){document.getElementById('fileWarning').hidden=false;document.getElementById('connection').textContent='F5から起動してください';}</script><script type="module" src="/app.js"></script></body></html>

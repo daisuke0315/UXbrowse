@@ -2,6 +2,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock,patch
 
 import cv2
 import numpy as np
@@ -21,6 +22,50 @@ class MeanColorEncoder:
 
 
 class ViewRetrievalTests(unittest.TestCase):
+    def analysis_index(self):
+        encoder=MeanColorEncoder()
+        encoder.encode=Mock(wraps=encoder.encode)
+        with patch.object(ViewRetrievalIndex,'_build_index',return_value=np.array([[1.,0.,0.]])):
+            index=ViewRetrievalIndex(Path('.'),[],mode='dino-global',encoder=encoder)
+        index.reference_preview=Mock(return_value=None)
+        index.views=[dict(image_name='reference.png')]
+        index.auto_roi=True
+        index.crop=True
+        bbox=(.25,.2,.5,.6)
+        index.detector=Mock()
+        index.detector.detect.return_value=(bbox,dict(mask=np.ones((16,16),np.uint8)))
+        return index,encoder,bbox
+
+    def test_photo_analysis_resizes_only_retrieval_and_preserves_normalized_roi(self):
+        index,encoder,bbox=self.analysis_index()
+        index.query_max_width=1280
+        image=np.full((1200,1600,3),80,np.uint8)
+        original=image.copy()
+        ranked,_,_,debug=index.rank_debug(image,top_k=1)
+        self.assertEqual(ranked[0][2],0)
+        self.assertEqual(index.detector.detect.call_args.args[0].shape,(960,1280,3))
+        self.assertEqual(encoder.encode.call_args.args[0].shape,(576,640,3))
+        self.assertEqual(debug['bbox'],bbox)
+        self.assertEqual(crop_box(image,debug['bbox']).shape,(720,800,3))
+        # The detector-only route used by fixed-reference validation is identical.
+        fixed_bbox,_=index.detect_query(image)
+        self.assertEqual(fixed_bbox,bbox)
+        self.assertEqual(index.detector.detect.call_args.args[0].shape,(960,1280,3))
+        np.testing.assert_array_equal(image,original)
+
+    def test_analysis_does_not_upscale_small_images_or_change_live_default(self):
+        index,encoder,bbox=self.analysis_index()
+        large=np.full((1200,1600,3),80,np.uint8)
+        index.rank(large,top_k=1)
+        self.assertIs(index.detector.detect.call_args.args[0],large)
+        index.query_max_width=1280
+        for shape in ((720,960,3),(1800,900,3)):
+            image=np.full(shape,80,np.uint8)
+            index.rank_debug(image,top_k=1)
+            self.assertIs(index.detector.detect.call_args.args[0],image)
+            index.detect_query(image)
+            self.assertIs(index.detector.detect.call_args.args[0],image)
+
     def test_crop_and_object_bbox(self):
         image = np.zeros((10, 20, 3), np.uint8)
         self.assertEqual(crop_box(image, (.25, .2, .5, .6)).shape, (6, 10, 3))
@@ -69,6 +114,24 @@ class ViewRetrievalTests(unittest.TestCase):
         np.testing.assert_allclose(world_to_camera[:3, :3].T @
                                    world_to_camera[:3, :3], np.eye(3), atol=1e-10)
         np.testing.assert_allclose(center, [12., 34., -200.])
+
+    def test_true_overhead_roll_rotates_camera_without_moving_eye(self):
+        center = np.array([12., 34., -200.])
+        eye = center + [0., 0., -250.]
+        zero, zero_inverse = look_at_opencv(
+            eye, center, up_sign=-1., preferred_up=np.array([0., 1., 0.]))
+        ninety, ninety_inverse = look_at_opencv(
+            eye, center, up_sign=-1., preferred_up=np.array([1., 0., 0.]))
+        np.testing.assert_allclose(zero_inverse[:3, 3], eye)
+        np.testing.assert_allclose(ninety_inverse[:3, 3], eye)
+        np.testing.assert_allclose(zero[:3, :3].T @ zero[:3, :3], np.eye(3))
+        np.testing.assert_allclose(ninety[:3, :3].T @ ninety[:3, :3], np.eye(3))
+        np.testing.assert_allclose(zero[:3, :3] @ (center - eye), [0., 0., 250.])
+        np.testing.assert_allclose(ninety[:3, :3] @ (center - eye), [0., 0., 250.])
+        self.assertAlmostEqual(float(np.trace(zero[:3, :3] @ ninety[:3, :3].T)), 1.)
+
+        with self.assertRaisesRegex(RuntimeError, 'nonzero'):
+            look_at_opencv(eye, center, preferred_up=np.zeros(3))
 
     def test_reference_rgb_mask_uses_rendered_silhouette(self):
         image = np.full((80, 100, 3), 255, np.uint8)

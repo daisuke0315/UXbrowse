@@ -1,0 +1,11 @@
+New coordinate-based drawing, not an edit of the generated photograph.
+All positions are schematic and follow the qualitative arrangement supplied by the user.
+No actual camera azimuth, elevation or distance is asserted.
+
+View 1: axis passes through phantom center; residual=5.68e-14
+View 2: axis passes through phantom center; residual=2.84e-14
+View 3: axis passes through phantom center; residual=2.84e-14
+View 4: axis passes through phantom center; residual=2.84e-14
+
+Suggested caption:
+Schematic plan view of image acquisition. A single iPhone 15 Pro RGB camera was moved to four oblique viewpoints around the phantom. Three images were acquired at each viewpoint (12 images in total). Arrows indicate the projected optical axes; viewpoint angles and distances are schematic.

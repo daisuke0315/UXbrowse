@@ -2,6 +2,70 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "MacAR: Browser Live (3DGS + MPR)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/MacAR/browser_live.py",
+      "python": "${workspaceFolder}/MacAR/.venv/bin/python3",
+      "cwd": "${workspaceFolder}/MacAR",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "TORCH_HOME": "${workspaceFolder}/data/MacAR/.model_cache/torch"
+      }
+    },
+    {
+      "name": "MacAR: iPhone Live Map Selector (GUI)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/MacAR/live_test_gui.py",
+      "python": "${workspaceFolder}/MacAR/.venv/bin/python3",
+      "cwd": "${workspaceFolder}/MacAR",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "TORCH_HOME": "${workspaceFolder}/data/MacAR/.model_cache/torch"
+      }
+    },
+    {
+      "name": "MacAR: Frozen CT Validation (No GUI)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/MacAR/realtime_pnp.py",
+      "python": "${workspaceFolder}/MacAR/.venv/bin/python3",
+      "cwd": "${workspaceFolder}/MacAR",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "justMyCode": true,
+      "args": [
+        "--camera", "1",
+        "--capture-backend", "opencv",
+        "--width", "0",
+        "--height", "0",
+        "--process-fps", "15",
+        "--max-processing-width", "1280",
+        "--matching-mode", "registered-aliked",
+        "--registered-map", "${workspaceFolder}/data/MacAR/output_aliked_object_map_enriched_pilot",
+        "--splat-views", "${workspaceFolder}/data/MacAR/output_3dgs_reference_views_72_upper_negz_v2",
+        "--glb-top-k", "5",
+        "--virtual-max-coarse-rotation", "55",
+        "--ransac-threshold", "6",
+        "--ct-validation",
+        "--volume", "${workspaceFolder}/data/260911/volume_preprocessed.model-bounds.mha",
+        "--coordinates", "${workspaceFolder}/data/260911/model-coordinate.json",
+        "--mpr-size", "512",
+        "--show-retrieval-crops"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "TORCH_HOME": "${workspaceFolder}/data/MacAR/.model_cache/torch"
+      }
+    },
+    {
       "name": "MacAR: Realtime PnP Main",
       "type": "debugpy",
       "request": "launch",
@@ -254,7 +318,7 @@
         "--glb",
         "${workspaceFolder}/data/260911/260108-3.glb",
         "--output",
-        "${workspaceFolder}/MacAR/output_glb_reference_views_poc",
+        "${workspaceFolder}/data/MacAR/output_glb_reference_views_poc",
         "--azimuths",
         "8",
         "--elevations",
@@ -284,7 +348,7 @@
         "--glb",
         "${workspaceFolder}/data/260911/260108-3.glb",
         "--output",
-        "${workspaceFolder}/MacAR/output_glb_reference_views_72",
+        "${workspaceFolder}/data/MacAR/output_glb_reference_views_72",
         "--azimuths",
         "12",
         "--elevations",
@@ -317,9 +381,9 @@
         "--query",
         "/Users/daisuketanii/Downloads/IMG_2532.jpeg",
         "--views",
-        "${workspaceFolder}/MacAR/output_glb_reference_views_poc",
+        "${workspaceFolder}/data/MacAR/output_glb_reference_views_poc",
         "--output",
-        "${workspaceFolder}/MacAR/output_glb_virtual_pnp",
+        "${workspaceFolder}/data/MacAR/output_glb_virtual_pnp",
         "--top-k",
         "5",
         "--min-inliers",
@@ -327,7 +391,7 @@
       ],
       "env": {
         "PYTHONUNBUFFERED": "1",
-        "TORCH_HOME": "${workspaceFolder}/MacAR/.model_cache/torch"
+        "TORCH_HOME": "${workspaceFolder}/data/MacAR/.model_cache/torch"
       }
     },
     {
@@ -346,7 +410,7 @@
         "--matching-mode",
         "glb-track",
         "--glb-views",
-        "${workspaceFolder}/MacAR/output_glb_reference_views_72",
+        "${workspaceFolder}/data/MacAR/output_glb_reference_views_72",
         "--glb-top-k",
         "3",
         "--glb-max-keypoints",
@@ -392,11 +456,11 @@
       ],
       "env": {
         "PYTHONUNBUFFERED": "1",
-        "TORCH_HOME": "${workspaceFolder}/MacAR/.model_cache/torch"
+        "TORCH_HOME": "${workspaceFolder}/data/MacAR/.model_cache/torch"
       }
     },
     {
-      "name": "MacAR: Generate 3DGS Shared Depth (Experimental)",
+      "name": "MacAR: Generate 3DGS Upper Shared Depth (Experimental)",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/MacAR/generate_3dgs_reference_views.py",
@@ -409,16 +473,22 @@
         "--ply",
         "/Users/daisuketanii/Library/CloudStorage/GoogleDrive-mp.daisuketanii@gmail.com/マイドライブ/010_splat/data/260918splat/splat.ply",
         "--output",
-        "${workspaceFolder}/MacAR/output_3dgs_reference_views_72_geometry_new",
+        "${workspaceFolder}/data/MacAR/output_3dgs_reference_views_72_upper_negz_shared_depth_experimental",
+        "--up-axis",
+        "negative-z",
+        "--geometry-mode",
+        "shared-gaussian-moments",
         "--azimuths",
         "12",
         "--elevations",
-        "-30",
         "0",
-        "30",
+        "25",
+        "50",
         "--distances",
         "1.7",
         "2.5",
+        "--fov-deg",
+        "65",
         "--width",
         "960",
         "--height",
@@ -429,7 +499,7 @@
       }
     },
     {
-      "name": "MacAR: 3DGS ALIKED LightGlue Live (72 Views)",
+      "name": "MacAR: 3DGS ALIKED LightGlue Live (128 Upper Views)",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/MacAR/main.py",
@@ -444,17 +514,17 @@
         "--matching-mode",
         "splat-track",
         "--splat-views",
-        "${workspaceFolder}/MacAR/output_3dgs_reference_views_72_ray_v2",
+        "${workspaceFolder}/data/MacAR/output_3dgs_reference_views_72_upper_negz_v2",
         "--virtual-policy",
         "validated",
         "--virtual-max-coarse-rotation",
         "35",
         "--virtual-diagnostics",
-        "${workspaceFolder}/MacAR/output_splat_audit/live_stages.jsonl",
+        "${workspaceFolder}/data/MacAR/output_splat_audit/live_stages.jsonl",
         "--glb-top-k",
         "10",
         "--glb-max-keypoints",
-        "2048",
+        "2000",
         "--glb-resize",
         "1024",
         "--glb-match-threshold",
@@ -483,6 +553,8 @@
         "0.20",
         "--tracking-reseed-frames",
         "150",
+        "--tracking-replenish-frames",
+        "30",
         "--tracking-min-points",
         "8",
         "--tracking-flow-window",
@@ -496,7 +568,7 @@
       ],
       "env": {
         "PYTHONUNBUFFERED": "1",
-        "TORCH_HOME": "${workspaceFolder}/MacAR/.model_cache/torch"
+        "TORCH_HOME": "${workspaceFolder}/data/MacAR/.model_cache/torch"
       }
     },
     {
@@ -512,15 +584,15 @@
       "args": [
         "--camera", "1",
         "--matching-mode", "splat-track",
-        "--splat-views", "${workspaceFolder}/MacAR/output_3dgs_reference_views_72_ray_v2",
+        "--splat-views", "${workspaceFolder}/data/MacAR/output_3dgs_reference_views_72_upper_negz_v2",
         "--retrieval-mode", "dino-spatial",
         "--retrieval-crop",
         "--retrieval-roi", "0.10", "0.10", "0.80", "0.80",
         "--virtual-policy", "validated",
         "--virtual-max-coarse-rotation", "35",
-        "--virtual-diagnostics", "${workspaceFolder}/MacAR/output_splat_audit/live_dino_stages.jsonl",
+        "--virtual-diagnostics", "${workspaceFolder}/data/MacAR/output_splat_audit/live_dino_stages.jsonl",
         "--glb-top-k", "10",
-        "--glb-max-keypoints", "2048",
+        "--glb-max-keypoints", "2000",
         "--glb-resize", "1024",
         "--glb-match-threshold", "0.01",
         "--capture-backend", "opencv",
@@ -532,11 +604,16 @@
         "--min-inliers", "10",
         "--min-inlier-ratio", "0.20",
         "--tracking-reseed-frames", "150",
+        "--tracking-replenish-frames", "30",
+        "--tracking-replenish-mode", "coverage",
+        "--tracking-replenish-distance-mm", "30",
+        "--tracking-replenish-height-mm", "15",
+        "--tracking-replenish-cooldown", "1",
         "--tracking-min-points", "8"
       ],
       "env": {
         "PYTHONUNBUFFERED": "1",
-        "TORCH_HOME": "${workspaceFolder}/MacAR/.model_cache/torch"
+        "TORCH_HOME": "${workspaceFolder}/data/MacAR/.model_cache/torch"
       }
     },
     {
@@ -552,15 +629,25 @@
       "args": [
         "--camera", "1",
         "--matching-mode", "splat-track",
-        "--splat-views", "${workspaceFolder}/MacAR/output_3dgs_reference_views_72_upper_negz_v2",
+        "--splat-views", "${workspaceFolder}/data/MacAR/output_3dgs_reference_views_72_upper_negz_v2",
         "--retrieval-mode", "dino-global",
         "--retrieval-auto-roi",
+        "--show-gs-pose-render",
+        "--gs-pose-render-hz", "5",
+        "--virtual-guided-features", "2000",
+        "--virtual-guided-radius", "96",
+        "--tracking-replenish-mode", "coverage",
+        "--tracking-replenish-distance-mm", "30",
+        "--tracking-replenish-height-mm", "15",
+        "--tracking-replenish-cooldown", "1",
+        "--tracking-replenish-image-coverage", "0.02",
+        "--tracking-replenish-angle", "12",
         "--show-retrieval-crops",
         "--virtual-policy", "validated",
         "--virtual-max-coarse-rotation", "35",
-        "--virtual-diagnostics", "${workspaceFolder}/MacAR/output_splat_audit/live_dino_auto_upper_stages.jsonl",
+        "--virtual-diagnostics", "${workspaceFolder}/data/MacAR/output_splat_audit/live_dino_auto_upper_stages.jsonl",
         "--glb-top-k", "3",
-        "--glb-max-keypoints", "2048",
+        "--glb-max-keypoints", "2000",
         "--glb-resize", "1024",
         "--glb-match-threshold", "0.01",
         "--capture-backend", "opencv",
@@ -572,11 +659,12 @@
         "--min-inliers", "10",
         "--min-inlier-ratio", "0.20",
         "--tracking-reseed-frames", "150",
+        "--tracking-replenish-frames", "30",
         "--tracking-min-points", "8"
       ],
       "env": {
         "PYTHONUNBUFFERED": "1",
-        "TORCH_HOME": "${workspaceFolder}/MacAR/.model_cache/torch"
+        "TORCH_HOME": "${workspaceFolder}/data/MacAR/.model_cache/torch"
       }
     },
     {

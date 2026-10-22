@@ -9,6 +9,7 @@ camera_index = 1
 cap = cv2.VideoCapture(camera_index, cv2.CAP_AVFOUNDATION)
 
 print("Python executable:", sys.executable)
+
 print("Python version:", sys.version)
 print("OpenCV:", cv2.__version__)
 print("NumPy:", np.__version__)
@@ -34,6 +35,7 @@ while True:
         break
 
     cv2.imshow("Simple OpenCV Camera Test", frame)
+    print(ret, frame.shape if ret else None, frame.mean() if ret else None)
 
     # q または ESC で終了
     key = cv2.waitKey(1) & 0xFF

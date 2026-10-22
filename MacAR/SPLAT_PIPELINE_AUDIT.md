@@ -1,5 +1,7 @@
 # 3DGS二段階matching 改善・測定記録（2026-09-23）
 
+この文書は旧参照マップでの実験履歴です。記載された旧マップは2026-09-24にゴミ箱へ移動しました。現在のライブ・再現試験は`output_3dgs_reference_views_72_upper_negz_v2`を使用します。旧コマンドをそのまま実行しないでください。
+
 ## 維持した設計
 
 live image → coarse view selection → ALIKED/LightGlue local matching → XYZ → PnP → quality check。
@@ -67,7 +69,7 @@ PlayCanvas 2.22.2のper-instance描画経路を使用。既存unified経路とRG
 - std<=10に緩めると実写真はPASSしたが、virtual view_0028の中心誤差は約6.56 units。PASSや見た目の改善だけでは採用できない。
 - Gaussianのopacity合成depthは実物の最前面surfaceではない。深度分布が広い領域を安易に採用すると、正しい画素ray上でも奥行きが誤る。
 
-実験データ`output_3dgs_reference_views_72_geometry_v2`は保存し、ライブ既定には接続していない。幾何proxyの物理精度、前景/表面depth推定、独立した幾何との整合は残課題。
+実験データ`output_3dgs_reference_views_72_geometry_v2`は当時保存していたが、現在はゴミ箱へ移動済み。幾何proxyの物理精度、前景/表面depth推定、独立した幾何との整合は残課題。
 
 ### 4. PnP
 
@@ -95,14 +97,14 @@ MPSのwarm時はquery抽出約80ms、retrieval約110ms、PnP約30ms程度。残�
 
 ## 起動・ログ・再現
 
-VS Code: `MacAR: 3DGS ALIKED LightGlue Live (72 Views)`。
-現在はray_v2 + validated QC。ライブログは`output_splat_audit/live_stages.jsonl`。
+以下は当時の測定を記録したものです。現在のVS Codeライブ設定は`MacAR: 3DGS DINOv2 Auto ROI Upper Live`で、`upper_negz_v2`を使用します。
+当時のライブログは`output_splat_audit/live_stages.jsonl`です。
 
 ```bash
 cd /Users/daisuketanii/Documents/GitHub/UXbrowse/MacAR
 source .venv/bin/activate
 python3 benchmark_splat_pipeline.py \
-  --views output_3dgs_reference_views_72_ray_v2 \
+  --views output_3dgs_reference_views_72_upper_negz_v2 \
   --query /Users/daisuketanii/Downloads/IMG_2532.jpeg \
   --holdout 13 28 2 37 60 --device auto --repeat 2 \
   --output output_splat_audit/new_run

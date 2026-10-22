@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import sys
 from pathlib import Path
@@ -15,7 +17,6 @@ from realtime_pnp import open_camera
 from realtime_pnp_server import LivePnPError
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 def calibrate(args) -> int:
@@ -129,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=Path,
-        default=SCRIPT_DIR / "output_colmap_image" / "iphone_camera_calibration.npz",
+        default=DATA_DIR / "output_colmap_image" / "iphone_camera_calibration.npz",
     )
     return parser
 

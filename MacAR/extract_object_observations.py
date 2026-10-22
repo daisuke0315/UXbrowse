@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import csv
 import math
@@ -17,11 +19,10 @@ from typing import Dict, Iterator, List, Optional, Sequence, Set, TextIO, Tuple
 from object_point_filter import parse_point_line
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_IMAGES = SCRIPT_DIR / "colmap" / "Images.txt"
-DEFAULT_CAMERAS = SCRIPT_DIR / "colmap" / "Cameras.txt"
-DEFAULT_STEP1_DIR = SCRIPT_DIR / "output"
-DEFAULT_IMAGE_DIR = SCRIPT_DIR / "image"
+DEFAULT_IMAGES = DATA_DIR / "colmap" / "Images.txt"
+DEFAULT_CAMERAS = DATA_DIR / "colmap" / "Cameras.txt"
+DEFAULT_STEP1_DIR = DATA_DIR / "output"
+DEFAULT_IMAGE_DIR = DATA_DIR / "image"
 
 CSV_FIELDS = (
     "image_id",

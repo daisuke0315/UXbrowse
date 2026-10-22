@@ -95,6 +95,44 @@ class SplatPoseViewerTests(unittest.TestCase):
         below, _ = self.viewer._project([[32., 24., 20.]], self.viewer.base_radius)
         self.assertLess(above[0, 1], below[0, 1])
 
+    def test_optional_gaussian_pose_panel_is_next_to_live_camera(self):
+        source = SimpleNamespace(
+            views_path=self.viewer.views_path,
+            views=self.viewer.views,
+            manifest=dict(bounds=[[0, 0, 0], [64, 48, 20]]),
+            _source_xyz_to_runtime=lambda points: points,
+        )
+        viewer = SplatPoseViewer(SimpleNamespace(global_localizer=source),
+                                 height=300, show_pose_render=True)
+        image = np.full((120, 160, 3), (20, 90, 210), np.uint8)
+        canvas = viewer.render(self.live, self.result('PASS'),
+                               gs_image=image, gs_age_ms=100.,
+                               gs_render_ms=30., gs_status='READY')
+        self.assertEqual(canvas.shape, (300, 1680, 3))
+        pose_panel = canvas[90:210, viewer.live_width:viewer.live_width + 440]
+        self.assertTrue(np.any(np.all(pose_panel == (20, 90, 210), axis=2)))
+
+    def test_gaussian_pose_refresh_does_not_redraw_map(self):
+        source = SimpleNamespace(
+            views_path=self.viewer.views_path,
+            views=self.viewer.views,
+            manifest=dict(bounds=[[0, 0, 0], [64, 48, 20]]),
+            _source_xyz_to_runtime=lambda points: points,
+        )
+        viewer = SplatPoseViewer(SimpleNamespace(global_localizer=source),
+                                 height=300, show_pose_render=True)
+        first = np.full((120, 160, 3), (20, 90, 210), np.uint8)
+        second = np.full((120, 160, 3), (180, 40, 80), np.uint8)
+        canvas = viewer.render(self.live, self.result('PASS'),
+                               gs_image=first, gs_age_ms=100.,
+                               gs_render_ms=30., gs_status='READY')
+        map_start = viewer.live_width + viewer.pose_render_width
+        map_before = canvas[:, map_start:].copy()
+        viewer.update_pose_render(canvas, second, 50., 20., 'READY', verified=True)
+        np.testing.assert_array_equal(canvas[:, map_start:], map_before)
+        pose_panel = canvas[90:210, viewer.live_width:map_start]
+        self.assertTrue(np.any(np.all(pose_panel == (180, 40, 80), axis=2)))
+
 
 if __name__ == "__main__":
     unittest.main()

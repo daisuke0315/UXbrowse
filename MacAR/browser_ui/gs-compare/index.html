@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ViewSync · 3DGS表示比較</title>
+<style>
+:root{color-scheme:dark}body{margin:0;background:#101720;color:#e2eaf3;font:15px system-ui,sans-serif}main{max-width:1600px;margin:auto;padding:24px}h1{font-size:24px;margin:0 0 8px;color:#72dbc2}p{line-height:1.6;color:#aabacd}select,button{font:inherit;color:inherit;background:#263447;border:1px solid #506780;border-radius:6px;padding:9px}label{display:inline-flex;align-items:center;gap:8px;margin:8px 14px 8px 0}input[type=range]{width:180px;accent-color:#72dbc2}#controls{padding:12px 16px;background:#1b2938;border-radius:10px}.panels{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}.panel{min-width:0;background:#1a2431;border:1px solid #3d5065;border-radius:10px;overflow:hidden}.heading{padding:12px 16px;font-weight:600}canvas{display:block;width:100%;aspect-ratio:4/3;opacity:1!important;touch-action:none}.status{padding:12px 16px;min-height:44px;font:13px ui-monospace,monospace}.note{border-left:3px solid #efb557;padding:10px 16px;background:#242323}#source{overflow-wrap:anywhere;font-size:12px}#error{color:#ffaca1}@media(max-width:900px){.panels{grid-template-columns:1fr}main{padding:12px}}
+</style>
+<main><h1>3DGS：同じモデル・同じ視点で表示を比較</h1>
+<p>左は現行条件、右は比較条件。CSS透過は両方100%。カメラ不要で、元PLY／DINO参照画像／XYZは変更しません。</p>
+<section id="controls">
+<label>参照view <select id="view" aria-label="参照view"></select></label>
+<label>右の描画 <select id="profile" aria-label="右の描画条件"></select></label><br>
+<label>方位 <input id="azimuth" type="range" min="-180" max="180" step="1" value="30"><output id="azimuthValue"></output></label>
+<label>上方角 <input id="elevation" type="range" min="-10" max="89" step="1" value="20"><output id="elevationValue"></output></label>
+<label>距離 <input id="distance" type="range" min="200" max="750" step="1" value="380"><output id="distanceValue"></output></label>
+<button id="rotate">回転して比較</button><button id="reset">参照viewに戻す</button>
+</section>
+<section id="capturePanel" hidden><p>128 viewを同じカメラ・白背景で再描画。RGBだけ変更し、元参照は保持します。</p><button id="capture">alpha 1.0対照と1.5参照を生成</button><p id="captureProgress" role="status"></p></section>
+<p id="error" role="alert"></p>
+<section class="panels"><div class="panel"><div class="heading">A · 現行条件</div><canvas id="baseline"></canvas><div class="status" id="baselineStatus">読み込み待ち</div></div>
+<div class="panel"><div class="heading" id="candidateHeading">B · 比較条件</div><canvas id="candidate"></canvas><div class="status" id="candidateStatus">読み込み待ち</div></div></section>
+<p class="note" id="note">静止後の透けと、回転中だけの乱れを分けて確認してください。左右同時描画のfpsなので単独ライブの性能値ではありません。</p>
+<p>ドラッグでも左右を同じ向きに動かせます。細い十字線・マーカー・輪郭が失われていないかも比較してください。</p>
+<p id="source"></p></main>
+<script type="module" src="/compare.js"></script></html>

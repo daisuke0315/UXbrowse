@@ -1,0 +1,19 @@
+Generation mode: built-in imagegen
+Reference: user-provided measurement schematic
+
+FINAL PROMPT
+Create a publication-quality scientific acquisition schematic using the supplied rough figure as a reference. Landscape white canvas, restrained academic figure design, crisp thin vector-like lines, clean Arial-style English typography, ample balanced whitespace, high resolution.
+
+The supplied image shows a beige cubic STI QC Phantom with small blue circular markings on its surface, standing on a black square mat, and four rough camera icons pointing at it. Use the central phantom as visual reference, preserving its recognizable cubic construction and markings. Render the phantom as a clearly schematic technical illustration rather than an altered experimental photograph. No invented anatomy, no extra phantom, no decorative imagery.
+
+Replace the existing rough icons and arrows with exactly FOUR consistent minimal smartphone camera symbols around the phantom, arranged at the four approximate positions shown in the supplied figure: left, upper left, upper right, and lower right. Each symbol faces the phantom, with exactly one matching slim muted red inward arrow ending before the phantom. Arrows do not cross labels or obscure the phantom. Camera icons are dark gray outlines, matching size and line weight. The repeated icons represent sequential positions of ONE camera, not four simultaneous cameras.
+
+Label each position once: "View 1", "View 2", "View 3", "View 4". Add a smaller line "3 images" beneath each view label. Add a modest label below the mat: "STI QC Phantom". At the bottom, include two neatly aligned lines:
+"Sequential acquisition with one iPhone 15 Pro RGB camera"
+"4 views × 3 images = 12 images"
+
+No main title, no panel letters, no borders, no gradients outside subtle phantom shading, no drop shadows, no watermark. Do not add camera distances, angles, orthogonal-view claims, measurement rulers, CT axes, occlusion conditions, or results. The geometry is an acquisition schematic only. Ensure all text is spelled exactly and is comfortably legible when placed across the width of a journal manuscript. Make the arrangement compact and professionally balanced without excessive empty space.
+
+SUGGESTED CAPTION
+Schematic of image acquisition. A single iPhone 15 Pro RGB camera was sequentially positioned at four viewpoints around the STI QC Phantom. Three images were acquired at each viewpoint, yielding 12 images in total. Camera positions and arrows are schematic.
+

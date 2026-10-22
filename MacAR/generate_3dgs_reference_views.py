@@ -9,6 +9,8 @@ transparent or mixed-depth pixels are invalid, not assumed to be a surface.
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import json
 import math
@@ -28,7 +30,7 @@ DEFAULT_PLY = Path(
     "/Users/daisuketanii/Library/CloudStorage/GoogleDrive-mp.daisuketanii@gmail.com/"
     "マイドライブ/010_splat/data/260918splat/splat.ply"
 )
-DEFAULT_OUTPUT = SCRIPT_DIR / "output_3dgs_reference_views_72_geometry_new"
+DEFAULT_OUTPUT = DATA_DIR / "output_3dgs_reference_views_72_upper_negz_generated"
 DEFAULT_NODE = Path(
     "/Users/daisuketanii/.cache/codex-runtimes/codex-primary-runtime/"
     "dependencies/node/bin/node"
@@ -169,13 +171,25 @@ def evaluate_sh(dc, rest, directions):
     return np.clip(result + 0.5, 0.0, 1.0)
 
 
-def look_at_opencv(eye: np.ndarray, target: np.ndarray, up_sign: float = 1.0):
+def look_at_opencv(eye: np.ndarray, target: np.ndarray, up_sign: float = 1.0,
+                   preferred_up: Optional[np.ndarray] = None):
     """Return OpenCV camera transforms with an explicit model vertical sign."""
     forward = np.asarray(target - eye, np.float64)
     forward /= np.linalg.norm(forward)
-    preferred_up = np.asarray((0.0, 0.0, up_sign), np.float64)
-    if abs(float(np.dot(forward, preferred_up))) > 0.98:
-        preferred_up = np.asarray((0.0, 1.0, 0.0), np.float64)
+    if preferred_up is None:
+        preferred_up = np.asarray((0.0, 0.0, up_sign), np.float64)
+        if abs(float(np.dot(forward, preferred_up))) > 0.98:
+            preferred_up = np.asarray((0.0, 1.0, 0.0), np.float64)
+    else:
+        preferred_up = np.asarray(preferred_up, np.float64)
+        if preferred_up.shape != (3,) or not np.isfinite(preferred_up).all():
+            raise SplatRenderError('Camera up vector must contain three finite values')
+        norm = float(np.linalg.norm(preferred_up))
+        if norm < 1e-12:
+            raise SplatRenderError('Camera up vector must be nonzero')
+        preferred_up /= norm
+        if abs(float(np.dot(forward, preferred_up))) > 0.98:
+            raise SplatRenderError('Camera up vector is parallel to the view direction')
     right = np.cross(forward, preferred_up)
     right /= np.linalg.norm(right)
     down = np.cross(forward, right)
@@ -234,8 +248,10 @@ def render_view(
     radius_scale,
     surface_thickness,
     up_sign=1.0,
+    preferred_up=None,
 ):
-    world_to_camera, camera_to_world = look_at_opencv(eye, target, up_sign)
+    world_to_camera, camera_to_world = look_at_opencv(
+        eye, target, up_sign, preferred_up)
     rotation = world_to_camera[:3, :3]
     translation = world_to_camera[:3, 3]
     # einsum avoids an Accelerate/BLAS warning observed for large non-aligned
@@ -344,6 +360,12 @@ def run(args) -> int:
         raise SplatRenderError("--azimuths-per-elevation needs one positive count per elevation")
     if not math.isfinite(args.azimuth_offset_deg):
         raise SplatRenderError("--azimuth-offset-deg must be finite")
+    if args.top_rolls is not None:
+        rolls = [float(angle) % 360. for angle in args.top_rolls]
+        if (len(args.elevations) != 1 or abs(args.elevations[0]-90.) > 1e-6
+            or not rolls or not all(math.isfinite(angle) for angle in args.top_rolls)
+            or len({round(angle, 6) for angle in rolls}) != len(rolls)):
+            raise SplatRenderError('--top-rolls needs elevation 90 and unique finite angles')
     if not 1 < args.fov_deg < 179:
         raise SplatRenderError("--fov-deg must be between 1 and 179")
     if not 0 <= args.minimum_opacity < 1:
@@ -367,14 +389,21 @@ def run(args) -> int:
          (0, 0, 1)),
         np.float64,
     )
-    positions = list(
-        camera_positions(
+    up_sign = -1.0 if args.up_axis == "negative-z" else 1.0
+    if args.top_rolls is None:
+        positions = [(*position, None, None) for position in camera_positions(
             center, radius, args.azimuths, args.elevations, args.distances,
-            args.azimuths_per_elevation,
-            -1.0 if args.up_axis == "negative-z" else 1.0,
-            args.azimuth_offset_deg,
-        )
-    )
+            args.azimuths_per_elevation, up_sign, args.azimuth_offset_deg)]
+    else:
+        positions = []
+        for distance_index, multiplier in enumerate(args.distances):
+            distance = radius * multiplier
+            eye = center + np.asarray((0., 0., up_sign * distance))
+            for roll_index, roll_deg in enumerate(args.top_rolls):
+                roll = math.radians(roll_deg)
+                up = np.asarray((math.sin(roll), math.cos(roll), 0.), np.float64)
+                positions.append((distance_index, 0, roll_index, 0., 90.,
+                                  distance, eye, up, float(roll_deg) % 360.))
     if (args.output / 'manifest.json').exists():
         raise SplatRenderError('Output already contains a manifest; use a new directory')
     args.output.mkdir(parents=True, exist_ok=True)
@@ -388,7 +417,8 @@ def run(args) -> int:
             {
                 "view_id": view_index,
                 "image_name": f"view_{view_index:04d}.png",
-                "eye": position[-1].tolist(),
+                "eye": position[6].tolist(),
+                **({"up": position[7].tolist()} if position[7] is not None else {}),
             }
         )
     if args.rgb_renderer == "browser":
@@ -441,6 +471,8 @@ def run(args) -> int:
         elevation_deg,
         distance,
         eye,
+        camera_up,
+        roll_deg,
     ) in enumerate(positions):
         name = f"view_{view_index:04d}"
         image_name = f"{name}.png"
@@ -451,7 +483,7 @@ def run(args) -> int:
                 xyz, scales, opacity, dc, rest, eye, center, camera_matrix,
                 args.width, args.height, args.maximum_radius, args.radius_scale,
                 args.surface_thickness,
-                -1.0 if args.up_axis == "negative-z" else 1.0)
+                up_sign, camera_up)
             if not cv2.imwrite(str(args.output / image_name), image):
                 raise SplatRenderError(f"Could not write {image_name}")
         else:
@@ -461,7 +493,7 @@ def run(args) -> int:
                     f"True 3DGS renderer did not produce a valid {image_name}"
                 )
             world_to_camera, camera_to_world = look_at_opencv(
-                eye, center, -1.0 if args.up_axis == "negative-z" else 1.0)
+                eye, center, up_sign, camera_up)
             if args.geometry_mode == 'shared-gaussian-moments':
                 moments = np.fromfile(args.output / f'{name}.moments.f32', dtype='<f4')
                 moments = moments.reshape(args.height, args.width, 4)
@@ -473,7 +505,7 @@ def run(args) -> int:
                     xyz, scales, opacity, dc, rest, eye, center, camera_matrix,
                     args.width, args.height, args.maximum_radius, args.radius_scale,
                     args.surface_thickness,
-                    -1.0 if args.up_axis == "negative-z" else 1.0)
+                    up_sign, camera_up)
                 valid = np.isfinite(legacy_xyz).all(axis=2) & np.isfinite(depth) & (depth > 0)
                 yy, xx = np.indices(depth.shape)
                 xyz_buffer = unproject(np.stack((xx, yy), axis=-1), depth,
@@ -499,6 +531,7 @@ def run(args) -> int:
                 "data_name": data_name,
                 "azimuth_deg": azimuth_deg,
                 "elevation_deg": elevation_deg,
+                **({"roll_deg": roll_deg} if roll_deg is not None else {}),
                 "distance": distance,
                 "distance_multiplier": args.distances[distance_index],
                 "eye": eye.tolist(),
@@ -523,6 +556,7 @@ def run(args) -> int:
                               else "legacy-cpu-centers"),
         "azimuths_per_elevation": args.azimuths_per_elevation,
         "azimuth_offset_deg": args.azimuth_offset_deg,
+        "top_rolls_deg": args.top_rolls,
         "geometry_min_alpha": args.geometry_min_alpha,
         "geometry_max_std": args.geometry_max_std,
         "geometry_note": (
@@ -556,16 +590,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--width", type=int, default=960)
     parser.add_argument("--height", type=int, default=720)
-    parser.add_argument("--fov-deg", type=float, default=55.0)
+    parser.add_argument("--fov-deg", type=float, default=65.0)
     parser.add_argument("--up-axis", choices=("positive-z", "negative-z"),
-                        default="positive-z",
+                        default="negative-z",
                         help="Model vertical direction for view sampling; does not transform XYZ")
     parser.add_argument("--azimuths", type=int, default=12)
     parser.add_argument("--azimuth-offset-deg", type=float, default=0.0)
+    parser.add_argument("--top-rolls", nargs="+", type=float,
+                        help="At elevation 90, render one fixed overhead camera per image roll")
     parser.add_argument("--azimuths-per-elevation", nargs="+", type=int,
                         help="Override azimuth count separately for each elevation")
     parser.add_argument(
-        "--elevations", nargs="+", type=float, default=(-30.0, 0.0, 30.0)
+        "--elevations", nargs="+", type=float, default=(0.0, 25.0, 50.0)
     )
     parser.add_argument(
         "--distances", nargs="+", type=float, default=(1.7, 2.5)
@@ -573,7 +609,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--minimum-opacity", type=float, default=0.005)
     parser.add_argument("--geometry-mode",
                         choices=("shared-gaussian-moments", "ray-legacy-depth"),
-                        default="shared-gaussian-moments",
+                        default="ray-legacy-depth",
                         help="Ray legacy mode keeps the deployed RGB/XYZ proxy protocol")
     parser.add_argument("--maximum-radius", type=int, default=3)
     parser.add_argument("--radius-scale", type=float, default=1.5)

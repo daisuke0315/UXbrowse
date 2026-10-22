@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import json
 import math
@@ -23,7 +25,7 @@ from offline_pnp_test import MapData, load_feature_map, select_unique_point_matc
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_FEATURES = SCRIPT_DIR / "output_colmap_image" / "object_features.npz"
+DEFAULT_FEATURES = DATA_DIR / "output_colmap_image" / "object_features.npz"
 DEFAULT_VOLUME = SCRIPT_DIR.parent / "data" / "260911" / "volume_preprocessed.model-bounds.mha"
 DEFAULT_COORDINATES = SCRIPT_DIR.parent / "data" / "260911" / "model-coordinate.json"
 
@@ -78,6 +80,8 @@ class LocalizationDebug:
     inlier_indices: frozenset[int]
     camera_center_model: Optional[tuple[float, float, float]]
     pnp_solved: bool
+    # Coordinates from the SAME localization frame, not projected substitutes.
+    image_points: object = None
 
 
 @dataclass(frozen=True)
@@ -223,6 +227,8 @@ class MPRRenderer:
     ) -> None:
         if texture_size < 32 or window_width <= 0 or not 0 <= opacity <= 1:
             raise LivePnPError("Invalid MPR rendering parameter")
+        self.volume_path = Path(volume_path)
+        self.coordinate_path = Path(coordinate_path)
         self.volume = load_mha(volume_path)
         try:
             metadata = json.loads(coordinate_path.read_text(encoding="utf-8"))
@@ -245,6 +251,7 @@ class MPRRenderer:
         self.window_width = window_width
         self.opacity = opacity
         self.slice_fraction = 0.5
+        self.camera_slice_distance = None
         self.zoom = 1.0
         self.unit_label = "mm" if source_unit.lower() == "millimeter" else source_unit
         self._control_lock = threading.Lock()
@@ -252,6 +259,7 @@ class MPRRenderer:
         self._measurement_points: list[object] = []
         self._last_inverse_homography = None
         self._last_inverse_view_homography = None
+        self._last_validation_plane = None
         self._zoom_center = None
 
         direction = np.linalg.inv(self.volume.inverse_direction)
@@ -303,6 +311,59 @@ class MPRRenderer:
         if np.isfinite(image_point).all():
             with self._control_lock:
                 self._zoom_center = image_point.astype(np.float64)
+
+    def display_to_camera_point(self, x: float, y: float):
+        """Undo display-only zoom; return a pixel in the captured camera frame."""
+        with self._control_lock:
+            inverse = self._last_inverse_view_homography
+            if inverse is None:
+                return None
+            inverse = inverse.copy()
+        point = cv2.perspectiveTransform(
+            np.asarray([[[x, y]]], np.float32), inverse).reshape(2)
+        return point.astype(np.float64) if np.isfinite(point).all() else None
+
+    def camera_to_display_point(self, u: float, v: float):
+        with self._control_lock:
+            inverse = self._last_inverse_view_homography
+            if inverse is None:
+                return None
+            transform = np.linalg.inv(inverse)
+        point = cv2.perspectiveTransform(
+            np.asarray([[[u, v]]], np.float32), transform).reshape(2)
+        return point.astype(np.float64) if np.isfinite(point).all() else None
+
+    def display_to_ct_point(self, x: float, y: float):
+        """Map a displayed MPR pixel to a fixed COLMAP-world/CT plane point."""
+        with self._control_lock:
+            inverse = self._last_inverse_homography
+            plane = self._last_validation_plane
+            if inverse is None or plane is None:
+                return None
+            inverse = inverse.copy()
+            center, right, up = (value.copy() for value in plane)
+        texture = cv2.perspectiveTransform(
+            np.asarray([[[x, y]]], np.float32), inverse).reshape(2)
+        maximum = self.texture_size - 1
+        if (not np.isfinite(texture).all() or
+                np.any(texture < 0) or np.any(texture > maximum)):
+            return None
+        half = maximum * .5
+        spacing = self.field_of_view / maximum
+        point = (center + right * (texture[0] - half) * spacing +
+                 up * (half - texture[1]) * spacing)
+        rc_point = colmap_to_rc(point)
+        voxel = ((rc_point - self.volume.origin) @ self.volume.inverse_direction.T
+                 / self.volume.spacing)
+        if (not np.isfinite(voxel).all() or np.any(voxel < 0) or
+                np.any(voxel > np.asarray(self.volume.dimensions) - 1)):
+            return None
+        return point.astype(np.float64), voxel.astype(np.float64)
+
+    def current_validation_plane(self):
+        with self._control_lock:
+            plane = self._last_validation_plane
+            return None if plane is None else tuple(value.copy() for value in plane)
 
     def set_measurement_enabled(self, enabled: bool) -> None:
         with self._control_lock:
@@ -441,9 +502,11 @@ class MPRRenderer:
         )
         return zoomed, transform
 
-    def render(self, image, camera_matrix, distortion, rvec, tvec):
+    def render(self, image, camera_matrix, distortion, rvec, tvec, *,
+               layer_only=False, crop_layer=False, native_layer=False):
         with self._control_lock:
             slice_fraction = self.slice_fraction
+            camera_slice_distance = getattr(self, 'camera_slice_distance', None)
             opacity = self.opacity
             zoom = self.zoom
             zoom_center = (
@@ -454,6 +517,11 @@ class MPRRenderer:
                 for point in self._measurement_points
             ]
             self._last_inverse_homography = None
+            self._last_inverse_view_homography = None
+            self._last_validation_plane = None
+            self._last_render_plane = None
+            self._last_layer_rect = None
+            self._last_layer_corners = None
         rotation, _ = cv2.Rodrigues(rvec)
         camera_center = (-rotation.T @ tvec).reshape(3)
         forward = rotation.T @ np.asarray((0.0, 0.0, 1.0))
@@ -463,15 +531,29 @@ class MPRRenderer:
         )
         slice_depth = (far - near) * slice_fraction
         target_depth = near + slice_depth
+        if camera_slice_distance is not None:
+            # ViewSync: eye + forward * fixed distance. The in-plane center
+            # stays near the volume to retain complete CT coverage.
+            target_depth = camera_slice_distance
+            slice_depth = target_depth-near
+            slice_fraction = slice_depth/max(far-near, 1e-9)
         center_depth = float(np.dot(self.volume_center - camera_center, forward))
         center = self.volume_center + forward * (target_depth - center_depth)
         right = rotation.T @ np.asarray((1.0, 0.0, 0.0))
         up = rotation.T @ np.asarray((0.0, -1.0, 0.0))
         right /= np.linalg.norm(right)
         up /= np.linalg.norm(up)
+        with self._control_lock:
+            # Expose the actual rendered plane even when its CT samples are
+            # transparent. It belongs to this image/pose, not the latest UI value.
+            self._last_render_plane = (center.copy(), forward.copy())
         gray, alpha = self._sample_plane(center, right, up, opacity)
         if float(alpha.max()) <= 0:
-            return image, "VOLUME_SAMPLE_EMPTY"
+            if layer_only and crop_layer:
+                self._last_layer_rect = (0, 0, 1, 1)
+            shape = ((1, 1, 4) if layer_only and (crop_layer or native_layer)
+                     else (*image.shape[:2], 4))
+            return (np.zeros(shape, np.uint8) if layer_only else image), "VOLUME_SAMPLE_EMPTY"
 
         half = self.field_of_view * 0.5
         corners = np.asarray(
@@ -485,15 +567,50 @@ class MPRRenderer:
         )
         camera_z = (rotation @ corners.T + tvec).T[:, 2]
         if np.any(camera_z <= 1e-6):
-            return image, "PLANE_BEHIND_CAMERA"
+            if layer_only and crop_layer:
+                self._last_layer_rect = (0, 0, 1, 1)
+            shape = ((1, 1, 4) if layer_only and (crop_layer or native_layer)
+                     else (*image.shape[:2], 4))
+            return (np.zeros(shape, np.uint8) if layer_only else image), "PLANE_BEHIND_CAMERA"
+        if layer_only and native_layer:
+            # Live AR projects this immutable WORLD plane with the latest pose.
+            # Fixed/photo measurement retains the exact inverse homography below.
+            self._last_layer_corners = corners
+            return np.dstack((gray, gray, gray,
+                np.clip(alpha*255., 0, 255).astype(np.uint8))), 'VISIBLE'
         projected, _ = cv2.projectPoints(corners, rvec, tvec, camera_matrix, distortion)
         destination = projected.reshape(4, 2).astype(np.float32)
         size = self.texture_size
         source = np.asarray(((0, 0), (size - 1, 0), (size - 1, size - 1), (0, size - 1)), dtype=np.float32)
         homography = cv2.getPerspectiveTransform(source, destination)
         output_size = (image.shape[1], image.shape[0])
-        warped_gray = cv2.warpPerspective(gray, homography, output_size, flags=cv2.INTER_LINEAR)
-        warped_alpha = cv2.warpPerspective(alpha, homography, output_size, flags=cv2.INTER_LINEAR)
+        warp_homography = homography
+        if layer_only and crop_layer:
+            # A photo can be 24 MP, but the CT plane usually covers only a
+            # small rectangle. Warp into that rectangle, keeping the inverse
+            # homography in FULL photo coordinates for accurate CT picking.
+            x0 = max(0, int(np.floor(destination[:, 0].min())) - 2)
+            y0 = max(0, int(np.floor(destination[:, 1].min())) - 2)
+            x1 = min(output_size[0], int(np.ceil(destination[:, 0].max())) + 3)
+            y1 = min(output_size[1], int(np.ceil(destination[:, 1].max())) + 3)
+            if x1 <= x0 or y1 <= y0:
+                self._last_layer_rect = (0, 0, 1, 1)
+                return np.zeros((1, 1, 4), np.uint8), "PLANE_OFFSCREEN"
+            self._last_layer_rect = (x0, y0, x1 - x0, y1 - y0)
+            output_size = (x1 - x0, y1 - y0)
+            shift = np.asarray(((1., 0., -x0), (0., 1., -y0),
+                                (0., 0., 1.)), np.float64)
+            warp_homography = shift @ homography
+        warped_gray = cv2.warpPerspective(gray, warp_homography, output_size, flags=cv2.INTER_LINEAR)
+        warped_alpha = cv2.warpPerspective(alpha, warp_homography, output_size, flags=cv2.INTER_LINEAR)
+        if layer_only:
+            # Browser zooms the whole image/layer stack together; no HUD or zoom baked in.
+            with self._control_lock:
+                self._last_inverse_view_homography = np.eye(3)
+                self._last_inverse_homography = np.linalg.inv(homography)
+                self._last_validation_plane = (center.copy(), right.copy(), up.copy())
+            return np.dstack((warped_gray, warped_gray, warped_gray,
+                              np.clip(warped_alpha * 255., 0, 255).astype(np.uint8))), "VISIBLE"
         overlay = np.repeat(warped_gray[..., None], 3, axis=2).astype(np.float32)
         amount = np.clip(warped_alpha[..., None], 0, 1)
         blended = image.astype(np.float32) * (1 - amount) + overlay * amount
@@ -505,6 +622,7 @@ class MPRRenderer:
         with self._control_lock:
             self._last_inverse_view_homography = np.linalg.inv(view_homography)
             self._last_inverse_homography = np.linalg.inv(display_homography)
+            self._last_validation_plane = (center.copy(), right.copy(), up.copy())
         self._draw_measurement(blended, display_homography, measurement_points)
         label = (
             f"MPR slice {slice_fraction * 100:6.1f}% "
@@ -741,6 +859,7 @@ class LivePnPLocalizer:
             frozenset(inlier_indices),
             tuple(float(value) for value in camera_center),
             True,
+            image_points.copy(),
         )
         if accepted:
             self.last_tracking_seed = TrackingSeed(
@@ -887,12 +1006,15 @@ class TemporalGlobalPnPLocalizer:
 
     def _track(self, image, camera_matrix, distortion):
         started = time.perf_counter()
+        self.last_failure_reason = None
         seed = self.seed
         if seed is None:
+            self.last_failure_reason = 'no_seed'
             return None
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         previous = np.asarray(seed.image_points, dtype=np.float32).reshape((-1, 1, 2))
         if len(previous) < self.min_track_points:
+            self.last_failure_reason = 'few_seed_points'
             return None
         lk = dict(
             winSize=(self.flow_window, self.flow_window),
@@ -907,11 +1029,13 @@ class TemporalGlobalPnPLocalizer:
             np.asarray(seed.gray), gray, previous, None, **lk
         )
         if forward is None or forward_status is None:
+            self.last_failure_reason = 'forward_flow_failed'
             return None
         backward, backward_status, _ = cv2.calcOpticalFlowPyrLK(
             gray, np.asarray(seed.gray), forward, None, **lk
         )
         if backward is None or backward_status is None:
+            self.last_failure_reason = 'backward_flow_failed'
             return None
         forward_flat = forward.reshape((-1, 2))
         backward_flat = backward.reshape((-1, 2))
@@ -933,6 +1057,7 @@ class TemporalGlobalPnPLocalizer:
         flow_done = time.perf_counter()
         flow_ms = (flow_done - started) * 1000.0
         if len(image_points) < self.min_track_points:
+            self.last_failure_reason = f'few_flow_points:{len(image_points)}'
             return None
         rvec_guess = np.asarray(seed.rvec, dtype=np.float64).copy()
         tvec_guess = np.asarray(seed.tvec, dtype=np.float64).copy()
@@ -950,6 +1075,7 @@ class TemporalGlobalPnPLocalizer:
             flags=cv2.SOLVEPNP_ITERATIVE,
         )
         if not success or inliers is None or len(inliers) < 4:
+            self.last_failure_reason = 'tracking_pnp_failed'
             return None
         inlier_indices = [int(value) for value in inliers.ravel()]
         guarded = (getattr(self.global_localizer, 'pipeline_policy', 'legacy') == 'validated')
@@ -986,12 +1112,14 @@ class TemporalGlobalPnPLocalizer:
             and inlier_ratio >= self.global_localizer.min_inlier_ratio
         )
         if not accepted:
+            self.last_failure_reason = f'few_pnp_inliers:{len(inlier_indices)}/{len(image_points)}'
             return None
         if guarded:
             quality = self.global_localizer.validate_pose(object_points, image_points,
                 rvec, tvec, inlier_indices, image.shape, camera_matrix, distortion)
             self.global_localizer.last_tracking_quality = quality
             if not quality['passed']:
+                self.last_failure_reason = ','.join(quality['reasons'])
                 return None
         rotation, _ = cv2.Rodrigues(rvec)
         camera_center = (-rotation.T @ tvec).reshape(3)
@@ -1000,6 +1128,7 @@ class TemporalGlobalPnPLocalizer:
             frozenset(inlier_indices),
             tuple(float(value) for value in camera_center),
             True,
+            image_points.copy(),
         )
         self.seed = TrackingSeed(
             gray.copy(),
@@ -1263,7 +1392,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--test-output",
         type=Path,
-        default=SCRIPT_DIR / "output_colmap_image" / "live_pnp_test.jpg",
+        default=DATA_DIR / "output_colmap_image" / "live_pnp_test.jpg",
     )
     return parser
 

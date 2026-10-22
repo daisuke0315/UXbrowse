@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import concurrent.futures
 import math
@@ -30,12 +32,13 @@ from realtime_pnp_server import (
     TemporalGlobalPnPLocalizer,
 )
 from splat_pose_viewer import SplatPoseViewer
+from map_preprocessing import selected_map
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_IMAGES = SCRIPT_DIR / "colmap_image" / "Images.txt"
-DEFAULT_GLB_VIEWS = SCRIPT_DIR / "output_glb_reference_views_72"
-DEFAULT_SPLAT_VIEWS = SCRIPT_DIR / "output_3dgs_reference_views_72_gpu"
+DEFAULT_IMAGES = DATA_DIR / "colmap_image" / "Images.txt"
+DEFAULT_GLB_VIEWS = DATA_DIR / "output_glb_reference_views_72"
+DEFAULT_SPLAT_VIEWS = DATA_DIR / "output_3dgs_reference_views_72_upper_negz_v2"
+DEFAULT_REGISTERED_MAP = selected_map(DATA_DIR / "output_aliked_object_map_enriched_pilot")
 PREVIEW_WINDOW = "ViewSync Continuity Camera PnP + MPR"
 
 
@@ -132,44 +135,92 @@ class MPRTrackbarControls:
 class AsyncReferenceLocalizer:
     """Keep camera/AF display responsive while reference search runs."""
 
-    def __init__(self, localizer, result_hold_seconds: float = 0.75) -> None:
+    def __init__(self, localizer, result_hold_seconds: float = 0.75,
+                 show_live_during_hold: bool = False) -> None:
         self.localizer = localizer
         self.map_data = localizer.map_data
         self.mpr_renderer = localizer.mpr_renderer
         self.last_debug = localizer.last_debug
         self.result_hold_seconds = result_hold_seconds
+        self.show_live_during_hold = show_live_during_hold
         self.executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="reference-pnp"
         )
         self.future = None
         self.last_result = None
         self.last_display = None
+        self.last_sample_frame = None
+        self.search_frame = None
+        self.last_pass_result = None
+        self.last_pass_frame = None
+        self.last_pass_time = 0.
+        self.discard_future = False
         self.show_result_until = 0.0
         self.search_started = 0.0
 
     def localize(self, image, camera_matrix, distortion):
         now = time.monotonic()
         if self.future is not None and self.future.done():
-            self.last_result, self.last_display = self.future.result()
-            self.last_debug = self.localizer.last_debug
+            if not self.discard_future:
+                self.last_result, self.last_display = self.future.result()
+                self.last_sample_frame = self.search_frame
+                self.last_debug = self.localizer.last_debug
+                if self.last_result.status == 'PASS':
+                    self.last_pass_result = self.last_result
+                    self.last_pass_frame = self.last_sample_frame
+                    self.last_pass_time = now
             self.future = None
-            self.show_result_until = now + self.result_hold_seconds
+            self.discard_future = False
+            if self.last_result is not None:
+                self.show_result_until = now + self.result_hold_seconds
         if self.future is None:
             self.search_started = now
+            self.search_frame = image.copy()
             self.future = self.executor.submit(
                 self.localizer.localize,
-                image.copy(),
+                self.search_frame.copy(),
                 camera_matrix.copy(),
                 distortion.copy(),
             )
         if self.last_result is not None and now < self.show_result_until:
+            if self.show_live_during_hold:
+                canvas = image.copy()
+                height, width = canvas.shape[:2]
+                thumbnail_width = max(160, min(320, width // 4))
+                if self.last_display is not None:
+                    sample = cv2.resize(
+                        self.last_display,
+                        (thumbnail_width, max(1, round(
+                            self.last_display.shape[0] * thumbnail_width /
+                            self.last_display.shape[1]))),
+                        interpolation=cv2.INTER_AREA,
+                    )
+                    sample_height = min(sample.shape[0], height // 3)
+                    sample = sample[:sample_height]
+                    left = width - thumbnail_width - 10
+                    top = height - sample_height - 12
+                    canvas[top:top+sample_height, left:left+thumbnail_width] = sample
+                    cv2.putText(canvas, 'LAST PnP SAMPLE', (left, max(18, top-6)),
+                                cv2.FONT_HERSHEY_SIMPLEX, .45, (255, 255, 255),
+                                1, cv2.LINE_AA)
+                cv2.rectangle(canvas, (0, 0), (width, 68), (20, 20, 20), -1)
+                cv2.putText(canvas,
+                    f"LIVE camera | previous PnP: {self.last_result.status} "
+                    f"{self.last_result.inliers} inliers",
+                    (14, 29), cv2.FONT_HERSHEY_SIMPLEX, .65,
+                    (50, 230, 70) if self.last_result.status == 'PASS'
+                    else (0, 190, 255), 2, cv2.LINE_AA)
+                cv2.putText(canvas, self.last_result.detail[:95],
+                            (14, 55), cv2.FONT_HERSHEY_SIMPLEX, .48,
+                            (230, 230, 230), 1, cv2.LINE_AA)
+                return self.last_result, canvas
             return self.last_result, self.last_display.copy()
         elapsed = max(0.0, now - self.search_started)
         canvas = image.copy()
         cv2.rectangle(canvas, (0, 0), (canvas.shape[1], 68), (20, 20, 20), -1)
         cv2.putText(
             canvas,
-            f"SEARCH  reference-guided localization  {elapsed:.1f} s",
+            f"SEARCH  {getattr(self.localizer, 'source_label', 'reference')}  {elapsed:.1f} s",
             (14, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.62,
             (0, 190, 255), 2, cv2.LINE_AA,
         )
@@ -193,6 +244,17 @@ class AsyncReferenceLocalizer:
 
     def close(self) -> None:
         self.executor.shutdown(wait=False, cancel_futures=True)
+
+    def clear_previous_result(self) -> None:
+        """Ignore pre-freeze searches when returning to live localization."""
+        self.last_result = None
+        self.last_display = None
+        self.last_sample_frame = None
+        self.last_pass_result = None
+        self.last_pass_frame = None
+        self.last_pass_time = 0.
+        self.show_result_until = 0.
+        self.discard_future = self.future is not None
 
 
 class FFmpegCapture:
@@ -379,9 +441,14 @@ class OpenCVDirectCapture:
 
     def __init__(self, index: int, width: int, height: int) -> None:
         backend = getattr(cv2, "CAP_AVFOUNDATION", cv2.CAP_ANY)
-        self.capture = cv2.VideoCapture(index, backend)
-        if not self.capture.isOpened():
+        for attempt in range(3):
+            self.capture = cv2.VideoCapture(index, backend)
+            if self.capture.isOpened():
+                break
             self.capture.release()
+            if attempt < 2:
+                time.sleep(0.2)
+        else:
             raise LivePnPError(
                 f"Camera {index} could not be opened. Check macOS Camera permission and --camera."
             )
@@ -426,6 +493,17 @@ class OpenCVDirectCapture:
 
     def release(self) -> None:
         self.capture.release()
+
+
+def read_camera_startup(capture):
+    """Allow transient empty AVFoundation frames on (re)connect, not forever."""
+    for attempt in range(20):
+        ok, frame = capture.read()
+        if ok and frame is not None:
+            return True, frame
+        if attempt < 19:
+            time.sleep(0.1)
+    return False, None
 
 
 class OpenCVLatestFrameCapture:
@@ -855,7 +933,37 @@ class PointCloud3DViewer:
         return True
 
 
-def build_localizer(args):
+def temporal_view_localizer(engine, args):
+    """Shared bounded background search / current-frame LK+PnP for both maps."""
+    from glb_virtual_live import AsyncTemporalGLBLocalizer
+    return AsyncTemporalGLBLocalizer(engine,
+        reseed_frames=args.tracking_reseed_frames,
+        min_track_points=args.tracking_min_points,
+        flow_window=args.tracking_flow_window,
+        flow_levels=args.tracking_flow_levels,
+        forward_backward_error=args.tracking_fb_error,
+        tracking_iterations=args.tracking_iterations,
+        max_seed_age=args.virtual_max_seed_age,
+        replenish_frames=args.tracking_replenish_frames,
+        replenish_mode=args.tracking_replenish_mode,
+        replenish_distance_mm=args.tracking_replenish_distance_mm,
+        replenish_height_mm=args.tracking_replenish_height_mm,
+        replenish_cooldown=args.tracking_replenish_cooldown,
+        replenish_image_coverage=args.tracking_replenish_image_coverage,
+        replenish_angle_deg=args.tracking_replenish_angle,
+        orbit_recovery=args.tracking_orbit_recovery)
+
+
+def build_localizer(args, *, temporal_registered=False):
+    if args.ct_validation and args.matching_mode != "registered-aliked":
+        raise LivePnPError("--ct-validation requires --matching-mode registered-aliked")
+    if args.ct_validation and args.no_mpr:
+        raise LivePnPError("--ct-validation cannot be combined with --no-mpr")
+    if args.matching_mode == "registered-aliked" and not args.no_mpr and not args.ct_validation:
+        raise LivePnPError(
+            "Registered ALIKED MPR is available only in frozen CT validation. "
+            "Add --ct-validation or use --no-mpr."
+        )
     renderer = None
     if not args.no_mpr:
         renderer = MPRRenderer(
@@ -866,6 +974,52 @@ def build_localizer(args):
             window_width=args.window_width,
             opacity=args.mpr_opacity,
         )
+    if args.matching_mode == "registered-aliked":
+        from registered_aliked_live import RegisteredALIKEDLiveLocalizer
+
+        registered_localizer = RegisteredALIKEDLiveLocalizer(
+            args.registered_map, args.splat_views,
+            top_k=args.glb_top_k,
+            max_keypoints=args.glb_max_keypoints,
+            resize=args.glb_resize,
+            match_threshold=args.glb_match_threshold,
+            fundamental_threshold=args.fundamental_threshold,
+            ransac_threshold=args.ransac_threshold,
+            iterations=args.iterations,
+            min_inliers=args.min_inliers,
+            min_inlier_ratio=args.min_inlier_ratio,
+            max_reprojection_error=args.glb_max_reprojection_error,
+            max_coarse_rotation_deg=args.virtual_max_coarse_rotation,
+            device=args.glb_device,
+            mpr_renderer=None,
+            retrieval_mode=args.retrieval_mode if args.retrieval_mode != 'sift' else 'dino-patch',
+            search_policy=getattr(args, 'registered_search_policy', 'adaptive'),
+        )
+        if args.ct_validation:
+            points = np.asarray(registered_localizer.map_data.xyz, np.float64)
+            inside = np.all((points >= renderer.volume_box_minimum - 10.) &
+                            (points <= renderer.volume_box_maximum + 10.), axis=1)
+            if renderer.unit_label != 'mm' or np.mean(inside) < .5:
+                raise LivePnPError(
+                    'CT volume/model bounds do not overlap the registered ALIKED map '
+                    'in millimeters. Check --volume and --coordinates.'
+                )
+            print(f'CT validation bounds precheck: {np.mean(inside):.1%} '
+                  'of ALIKED XYZ inside CT bounds (+10 mm). '
+                  'This does not prove CT registration accuracy.')
+        if temporal_registered:
+            wrapper = temporal_view_localizer(registered_localizer, args)
+            # Compatibility for frozen registered-map validation helpers.
+            wrapper.localizer = registered_localizer
+            wrapper.mpr_renderer = renderer
+            return wrapper
+        wrapper = AsyncReferenceLocalizer(
+            registered_localizer,
+            result_hold_seconds=args.reference_result_hold,
+            show_live_during_hold=True,
+        )
+        wrapper.mpr_renderer = renderer
+        return wrapper
     if args.matching_mode in {"glb-track", "splat-track"}:
         from glb_virtual_live import AsyncTemporalGLBLocalizer, GLBVirtualLiveLocalizer
 
@@ -895,6 +1049,10 @@ def build_localizer(args):
             retrieval_crop=args.retrieval_crop,
             retrieval_roi=args.retrieval_roi,
             retrieval_auto_roi=args.retrieval_auto_roi,
+            guided_optimization=not args.virtual_guided_baseline,
+            guided_feature_budget=args.virtual_guided_features,
+            guided_pixel_radius=args.virtual_guided_radius,
+            guided_early_descriptors=not args.virtual_guided_full_descriptors,
         )
         return AsyncTemporalGLBLocalizer(
             glb_localizer,
@@ -905,6 +1063,16 @@ def build_localizer(args):
             forward_backward_error=args.tracking_fb_error,
             tracking_iterations=args.tracking_iterations,
             max_seed_age=args.virtual_max_seed_age,
+            replenish_frames=(args.tracking_replenish_frames
+                              if args.matching_mode == "splat-track" else 0),
+            replenish_mode=(args.tracking_replenish_mode
+                            if args.matching_mode == "splat-track" else 'interval'),
+            replenish_distance_mm=args.tracking_replenish_distance_mm,
+            replenish_height_mm=args.tracking_replenish_height_mm,
+            replenish_cooldown=args.tracking_replenish_cooldown,
+            replenish_image_coverage=args.tracking_replenish_image_coverage,
+            replenish_angle_deg=args.tracking_replenish_angle,
+            orbit_recovery=args.tracking_orbit_recovery,
         )
     if args.matching_mode == "reference":
         from reference_guided_live import ReferenceGuidedLiveLocalizer
@@ -1014,6 +1182,7 @@ def add_performance_hud(
     input_size,
     work_size,
     args,
+    replenished: int = 0,
 ) -> None:
     cv2.rectangle(frame, (0, 68), (frame.shape[1], 171), (24, 24, 24), -1)
     measured_latency = queue_age_ms + pipeline_ms
@@ -1024,13 +1193,29 @@ def add_performance_hud(
             f"guided hypotheses {args.guided_hypotheses} | "
             f"ratio<{args.reference_ratio:g} | RANSAC {args.ransac_threshold:g}px"
         )
+    elif args.matching_mode == "registered-aliked":
+        matcher_text = (
+            f"3DGS DINO auto-ROI -> RC ALIKED+LightGlue top-{args.glb_top_k} "
+            f"-> triangulated XYZ -> PnP | RANSAC {args.ransac_threshold:g}px"
+        )
     elif args.matching_mode in {"glb-track", "splat-track"}:
         source_label = "3DGS" if args.matching_mode == "splat-track" else "GLB"
+        replenish_text = (f" + pose-guided/{args.tracking_replenish_frames}f"
+                          if args.matching_mode == "splat-track" and args.tracking_replenish_frames
+                          else "")
+        if args.matching_mode == "splat-track" and args.tracking_replenish_mode in ('coverage', 'background'):
+            replenish_text = (f" + dynamic XYZ {args.tracking_replenish_distance_mm:g}mm"
+                              f"/height {args.tracking_replenish_height_mm:g}mm")
+        if args.matching_mode == "splat-track" and not args.virtual_guided_baseline:
+            replenish_text += (f" | guided <= {args.virtual_guided_features} features"
+                               f"/{args.virtual_guided_radius:g}px")
+            if not args.virtual_guided_full_descriptors:
+                replenish_text += ' | selective descriptors + retry cache'
         matcher_text = (
             f"{source_label} {args.retrieval_mode}"
             f"{'+autoROI' if args.retrieval_auto_roi else '+crop' if args.retrieval_crop else ''} "
             f"-> ALIKED+LightGlue top-{args.glb_top_k} + LK tracking | "
-            f"reseed {args.tracking_reseed_frames} frames | "
+            f"reseed {args.tracking_reseed_frames} frames{replenish_text} | "
             f"RANSAC {args.ransac_threshold:g}px"
         )
     elif args.matching_mode == "global-track":
@@ -1043,8 +1228,11 @@ def add_performance_hud(
             f"ratio<{args.ratio:g} | knn {args.knn} | "
             f"RANSAC {args.ransac_threshold:g}px"
         )
-    retrieval_label = (args.retrieval_mode if args.matching_mode in {'glb-track', 'splat-track'}
+    retrieval_label = ('DINO+RC' if args.matching_mode == 'registered-aliked' else
+                       args.retrieval_mode if args.matching_mode in {'glb-track', 'splat-track'}
                        else 'SIFT')
+    mpr_state = ('OFF' if args.no_mpr else
+                 'READY (PASS then V)' if args.ct_validation else 'ON')
     lines = (
         (
             f"capture {capture_fps:4.1f} fps | process {process_fps:4.1f} fps "
@@ -1056,11 +1244,12 @@ def add_performance_hud(
             f"PnP {result.pnp_ms:.0f} ms | MPR {result.mpr_ms:.0f} ms | "
             f"localize {localize_ms:.0f} ms | debug3D {viewer_ms:.0f} ms | "
             f"keypoints {result.keypoints}"
+            f"{' | guided +' + str(replenished) if replenished else ''}"
         ),
         (
             f"pipeline {pipeline_ms:.0f} ms | input {input_size[0]}x{input_size[1]} "
             f"-> work {work_size[0]}x{work_size[1]} | debug3D {debug_3d} | "
-            f"MPR {'OFF' if args.no_mpr else 'ON'} | center focus {focus_score:.1f} "
+            f"MPR {mpr_state} | center focus {focus_score:.1f} "
             f"(PnP gate >={args.min_focus_score:g})"
         ),
         (
@@ -1079,6 +1268,33 @@ def add_performance_hud(
             1,
             cv2.LINE_AA,
         )
+
+
+def draw_aliked_object_window(live_frame, live_bbox, matched_crop):
+    """Compare the live detected ROI with the exact last ALIKED input."""
+    from glb_virtual_live import crop_live_object
+
+    panel = np.full((410, 800, 3), 26, np.uint8)
+    cv2.putText(panel, "LIVE ROI (latest detection)", (10, 26),
+                cv2.FONT_HERSHEY_SIMPLEX, .54, (225, 225, 225), 1, cv2.LINE_AA)
+    cv2.putText(panel, "LAST ALIKED INPUT", (410, 26),
+                cv2.FONT_HERSHEY_SIMPLEX, .54, (225, 225, 225), 1, cv2.LINE_AA)
+    live = crop_live_object(live_frame, live_bbox)
+    for column, content in ((0, None if live is None else live[0]),
+                            (400, matched_crop)):
+        if content is None:
+            cv2.putText(panel, "No valid object ROI yet", (column+10, 210),
+                        cv2.FONT_HERSHEY_SIMPLEX, .50, (0, 180, 255), 1, cv2.LINE_AA)
+            continue
+        height, width = content.shape[:2]
+        scale = min(380./width, 355./height)
+        preview = cv2.resize(content, (max(1, round(width*scale)),
+                                       max(1, round(height*scale))),
+                             interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR)
+        top = 42 + (355-preview.shape[0])//2
+        left = column + 10 + (380-preview.shape[1])//2
+        panel[top:top+preview.shape[0], left:left+preview.shape[1]] = preview
+    return panel
 
 
 def add_focus_hold(frame, focus_score: float, threshold: float) -> None:
@@ -1125,7 +1341,13 @@ def run_camera(args) -> int:
             "Autofocus: device-managed; OpenCV/AVFoundation is continuously "
             "drained on a latest-frame thread"
         )
-    localizer = build_localizer(args)
+    print('Loading localization map and models; camera preview opens after initialization.',
+          flush=True)
+    try:
+        localizer = build_localizer(args)
+    except Exception:
+        capture.release()
+        raise
     ok, frame = capture.read()
     if not ok or frame is None:
         detail = capture.error_detail()
@@ -1143,17 +1365,30 @@ def run_camera(args) -> int:
     if localizer.mpr_renderer is not None:
         mpr_controls = MPRTrackbarControls(PREVIEW_WINDOW, localizer.mpr_renderer)
     approximate = args.calibration is None and args.intrinsics is None
+    gs_pose_renderer = None
     if args.no_3d:
         viewer = None
     elif args.matching_mode == "splat-track":
-        viewer = SplatPoseViewer(localizer)
+        viewer = SplatPoseViewer(localizer, show_pose_render=args.show_gs_pose_render)
+        if args.show_gs_pose_render:
+            try:
+                from live_gaussian_pose_render import LiveGaussianPoseRenderer
+                gs_pose_renderer = LiveGaussianPoseRenderer(
+                    args.splat_views, work_frame.shape,
+                    max_hz=args.gs_pose_render_hz)
+            except (OSError, ValueError) as exc:
+                print(f'3DGS pose preview unavailable: {exc}', flush=True)
     else:
         viewer = PointCloud3DViewer(localizer)
 
     def render_viewer(frame, result):
         if isinstance(viewer, SplatPoseViewer):
+            live_for_comparison = work_frame if args.show_gs_pose_render else frame
+            gs_image, gs_age_ms, gs_render_ms, gs_status = (
+                gs_pose_renderer.snapshot() if gs_pose_renderer is not None
+                else (None, None, 0., 'UNAVAILABLE'))
             return viewer.render(
-                frame, result,
+                live_for_comparison, result,
                 search_result=localizer.last_search_result,
                 diagnostics=localizer.last_search_diagnostics,
                 candidate_age_ms=localizer.last_search_age_ms,
@@ -1161,10 +1396,15 @@ def run_camera(args) -> int:
                 coarse_reference_name=localizer.coarse_reference_name,
                 coarse_margin=localizer.coarse_margin,
                 coarse_mode=localizer.global_localizer.retrieval_mode,
+                gs_image=gs_image,
+                gs_age_ms=gs_age_ms,
+                gs_render_ms=gs_render_ms,
+                gs_status=gs_status,
             )
         return viewer.render(localizer.last_debug, result.status)
     last_3d_display = None
     last_result = None
+    validation_session = None
     last_queue_age_ms = 0.0
     last_localize_ms = 0.0
     last_viewer_ms = 0.0
@@ -1186,6 +1426,9 @@ def run_camera(args) -> int:
     )
     if approximate:
         print("WARNING: approximate intrinsics; calibrate before evaluating MPR alignment accuracy.")
+    if args.ct_validation:
+        print('CT validation is ready: wait for PASS, then press V in the camera window '
+              'to freeze the frame and show MPR.', flush=True)
     print("Press Q or Esc in the preview window to stop.")
 
     period = 1.0 / args.process_fps
@@ -1204,6 +1447,40 @@ def run_camera(args) -> int:
                 if raw_key in (ord("q"), 27):
                     break
             now = time.monotonic()
+            if validation_session is not None:
+                if now - last_processed >= period:
+                    last_display = validation_session.render()
+                    last_processed = now
+                cv2.imshow(PREVIEW_WINDOW, last_display)
+                key = cv2.waitKey(1) & 0xFF
+                if key in (ord('q'), 27):
+                    break
+                if key == ord('r'):
+                    validation_session = None
+                    clear_result = getattr(localizer, 'clear_previous_result', None)
+                    if clear_result is not None:
+                        clear_result()
+                    last_result = None
+                    if mpr_controls is not None:
+                        cv2.setMouseCallback(PREVIEW_WINDOW, mpr_controls._mouse_event)
+                    print('CT validation released; returning to live localization.', flush=True)
+                elif key == ord('n'):
+                    percent = validation_session.return_to_marker_slice()
+                    if percent is not None:
+                        cv2.setTrackbarPos(MPRTrackbarControls.SLICE, PREVIEW_WINDOW,
+                            int(round(percent * 10)) - MPRTrackbarControls.SLICE_MIN)
+                elif key == ord('s'):
+                    try:
+                        measured = validation_session.save(
+                            args.validation_output, calibration_label=calibration_label)
+                    except (ValueError, OSError) as exc:
+                        print(f'CT validation not saved: {exc}', flush=True)
+                    else:
+                        print(f'CT validation saved: {args.validation_output} | '
+                              f'{measured["pixel_error"]:.2f}px | '
+                              f'{measured["lateral_error"]:.2f} {measured["unit"]}',
+                              flush=True)
+                continue
             if now - last_processed >= period:
                 pipeline_started = now
                 work_frame, _ = resize_for_processing(frame, args.max_processing_width)
@@ -1237,6 +1514,8 @@ def run_camera(args) -> int:
                     result, last_display = localizer.localize(
                         work_frame, matrix, distortion
                     )
+                    if gs_pose_renderer is not None:
+                        gs_pose_renderer.submit(result, matrix, work_frame.shape)
                     last_localize_ms = (time.monotonic() - localize_started) * 1000.0
                     last_result = result
                     last_viewer_ms = 0.0
@@ -1271,7 +1550,7 @@ def run_camera(args) -> int:
                             f"{result.status} matches={result.matches} inliers={result.inliers} "
                             f"error={error} MPR={result.mpr_status} "
                             f"total={result.processing_ms:.0f}ms "
-                            f"[{args.retrieval_mode if args.matching_mode in {'glb-track', 'splat-track'} else 'SIFT'} "
+                            f"[{'DINO+RC' if args.matching_mode == 'registered-aliked' else args.retrieval_mode if args.matching_mode in {'glb-track', 'splat-track'} else 'SIFT'} "
                             f"{result.sift_ms:.0f} match {result.matching_ms:.0f} "
                             f"PnP {result.pnp_ms:.0f} MPR {result.mpr_ms:.0f}] "
                             f"localize={last_localize_ms:.0f}ms "
@@ -1311,6 +1590,7 @@ def run_camera(args) -> int:
                     input_size=(input_width, input_height),
                     work_size=(work_width, work_height),
                     args=args,
+                    replenished=getattr(localizer, "last_replenished", 0),
                 )
             if localizer.mpr_renderer is not None:
                 localizer.mpr_renderer.set_measurement_enabled(
@@ -1319,15 +1599,34 @@ def run_camera(args) -> int:
                     and last_result.mpr_status == "VISIBLE"
                 )
             cv2.imshow(PREVIEW_WINDOW, last_display)
-            if args.show_retrieval_crops and args.matching_mode in {'glb-track', 'splat-track'}:
+            if args.show_retrieval_crops and args.matching_mode in {'glb-track', 'splat-track', 'registered-aliked'}:
                 from view_retrieval import draw_crop_comparison
-                crop_debug = localizer.coarse_crop_debug
+                crop_debug = (localizer.localizer.last_crop_debug
+                              if args.matching_mode == 'registered-aliked'
+                              else localizer.coarse_crop_debug)
                 if crop_debug:
                     cv2.imshow('ViewSync Embedding Crops',
                                draw_crop_comparison(crop_debug, mode=args.retrieval_mode))
+            if (args.matching_mode == 'splat-track' and
+                (args.retrieval_auto_roi or args.retrieval_crop)):
+                aliked_crop = localizer.global_localizer.last_aliked_crop
+                live_bbox = (localizer.coarse_crop_debug or {}).get('bbox')
+                cv2.imshow('ViewSync ALIKED Object ROI',
+                           draw_aliked_object_window(work_frame, live_bbox,
+                                                     aliked_crop))
             if viewer is not None and last_3d_display is not None:
                 if isinstance(viewer, SplatPoseViewer):
-                    viewer.update_live(last_3d_display, last_display)
+                    viewer.update_live(last_3d_display,
+                                       work_frame if args.show_gs_pose_render
+                                       else last_display)
+                    if gs_pose_renderer is not None:
+                        gs_image, gs_age_ms, gs_render_ms, gs_status = (
+                            gs_pose_renderer.snapshot())
+                        viewer.update_pose_render(
+                            last_3d_display, gs_image, gs_age_ms,
+                            gs_render_ms, gs_status,
+                            verified=(last_result is not None and
+                                      last_result.status == 'PASS'))
                     viewer_window = viewer.WINDOW
                 else:
                     viewer_window = "ViewSync Live 3D Match Coverage"
@@ -1335,10 +1634,32 @@ def run_camera(args) -> int:
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), 27):
                 break
+            if args.ct_validation and key == ord('v'):
+                pass_result = getattr(localizer, 'last_pass_result', None)
+                sample = getattr(localizer, 'last_pass_frame', None)
+                pass_age = time.monotonic() - getattr(localizer, 'last_pass_time', 0.)
+                if (pass_result is None or sample is None or pass_age > 10. or
+                        pass_result.rvec is None or pass_result.tvec is None):
+                    print('CT validation: wait for a PASS from the last 10 seconds.',
+                          flush=True)
+                else:
+                    from ct_overlay_validation import CTValidationSession
+                    validation_session = CTValidationSession(
+                        localizer.mpr_renderer, sample, matrix, distortion,
+                        pass_result, intrinsics_label=calibration_label)
+                    localizer.mpr_renderer.clear_measurement()
+                    localizer.mpr_renderer.set_measurement_enabled(False)
+                    cv2.setMouseCallback(PREVIEW_WINDOW, validation_session.mouse_event)
+                    print('CT validation frozen. Click LIVE marker; Shift+click CT marker. '
+                          'Use slice/zoom sliders, N=same CT slice, S=save, R=resume.',
+                          flush=True)
+                continue
             if viewer is not None and viewer.handle_key(key) and last_result is not None:
                 last_3d_display = render_viewer(last_display, last_result)
     finally:
         capture.release()
+        if gs_pose_renderer is not None:
+            gs_pose_renderer.close()
         close_localizer = getattr(localizer, "close", None)
         if close_localizer is not None:
             close_localizer()
@@ -1400,11 +1721,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--features", type=Path, default=DEFAULT_FEATURES)
     parser.add_argument(
         "--matching-mode",
-        choices=("global", "global-track", "reference", "glb-track", "splat-track"),
+        choices=("global", "global-track", "reference", "glb-track", "splat-track", "registered-aliked"),
         default="global-track",
         help="2D-3D correspondence mode",
     )
     parser.add_argument("--tracking-reseed-frames", type=int, default=10)
+    parser.add_argument("--tracking-replenish-frames", type=int, default=30,
+                        help="3DGS replenishment cadence in interval mode; 0 disables interval")
+    parser.add_argument("--tracking-replenish-mode", choices=('coverage', 'interval', 'background'),
+                        default='coverage', help="3DGS replenishment trigger")
+    parser.add_argument('--tracking-orbit-recovery', action='store_true',
+                        help='Experimental GS background orbit recovery; accuracy is not validated')
+    parser.add_argument("--tracking-replenish-distance-mm", type=float, default=30.,
+                        help="minimum pairwise separation of three tracked PnP inliers")
+    parser.add_argument("--tracking-replenish-height-mm", type=float, default=15.,
+                        help="minimum triangle altitude against its longest edge")
+    parser.add_argument("--tracking-replenish-cooldown", type=float, default=1.,
+                        help="minimum seconds between replenishment searches")
+    parser.add_argument('--tracking-replenish-image-coverage', type=float, default=.02,
+                        help='Replenish when the inlier convex hull covers less than this image fraction')
+    parser.add_argument('--tracking-replenish-angle', type=float, default=12.,
+                        help='Replenish after this object-to-camera direction change from the last verified refresh')
     parser.add_argument("--tracking-min-points", type=int, default=10)
     parser.add_argument("--tracking-flow-window", type=int, default=31)
     parser.add_argument("--tracking-flow-levels", type=int, default=3)
@@ -1413,12 +1750,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--images", type=Path, default=DEFAULT_IMAGES)
     parser.add_argument("--glb-views", type=Path, default=DEFAULT_GLB_VIEWS)
     parser.add_argument("--splat-views", type=Path, default=DEFAULT_SPLAT_VIEWS)
+    parser.add_argument("--registered-map", type=Path, default=DEFAULT_REGISTERED_MAP,
+                        help="Directory built by build_aliked_object_map.py")
+    parser.add_argument('--registered-search-policy', choices=('adaptive', 'exhaustive'),
+                        default='adaptive', help='Stop registered-photo search only after two strong '
+                        'agreeing poses, or process the complete shortlist for comparison')
     parser.add_argument("--glb-top-k", type=int, default=5)
     parser.add_argument("--glb-sift-ratio", type=float, default=0.78)
-    parser.add_argument("--retrieval-mode", choices=("sift", "dino-global", "dino-spatial"),
+    parser.add_argument("--retrieval-mode", choices=("sift", "dino-global", "dino-spatial", "dino-patch"),
                         default="sift", help="Virtual-view coarse retrieval; SIFT remains the default")
     parser.add_argument("--retrieval-crop", action="store_true",
-                        help="Crop virtual views to geometry mask bbox and live image to --retrieval-roi")
+                        help="Crop reference retrieval views and live ALIKED input to object ROIs")
     parser.add_argument("--retrieval-auto-roi", action="store_true",
                         help="Detect the live 3DGS object via reference-supervised DINO patches")
     parser.add_argument("--show-retrieval-crops", action="store_true",
@@ -1426,8 +1768,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--retrieval-roi", nargs=4, type=float,
                         metavar=("X", "Y", "WIDTH", "HEIGHT"),
                         default=(0.10, 0.10, 0.80, 0.80),
-                        help="Normalized live-image ROI for coarse retrieval only")
-    parser.add_argument("--glb-max-keypoints", type=int, default=2048)
+                        help="Normalized fixed live-image ROI for retrieval and ALIKED")
+    parser.add_argument("--glb-max-keypoints", type=int, default=2000)
     parser.add_argument("--glb-resize", type=int, default=1024)
     parser.add_argument("--glb-match-threshold", type=float, default=0.01)
     parser.add_argument("--glb-xyz-search-radius", type=int, default=2)
@@ -1440,6 +1782,14 @@ def build_parser() -> argparse.ArgumentParser:
                         help='Max PnP rotation difference from supplying 3DGS view (degrees)')
     parser.add_argument('--virtual-fast-consensus', action='store_true',
                         help='Experimental early exit after agreeing candidate poses (off by default)')
+    parser.add_argument('--virtual-guided-baseline', action='store_true',
+                        help='Disable pose-guided point filtering and sequential early exit')
+    parser.add_argument('--virtual-guided-features', type=int, default=2000,
+                        help='Spatially distributed feature budget during tracked replenishment only')
+    parser.add_argument('--virtual-guided-radius', type=float, default=96.,
+                        help='Pose-prior matching gate in full-image pixels')
+    parser.add_argument('--virtual-guided-full-descriptors', action='store_true',
+                        help='Comparison: compute all descriptors before guided selection')
     parser.add_argument('--virtual-appearance-audit', action='store_true',
                         help='Log broad photometric evidence excluding PnP features; diagnostic only')
     parser.add_argument(
@@ -1467,9 +1817,17 @@ def build_parser() -> argparse.ArgumentParser:
     calibration.add_argument("--calibration", type=Path)
     calibration.add_argument("--intrinsics", nargs=4, type=float, metavar=("FX", "FY", "CX", "CY"))
     parser.add_argument("--distortion", nargs=5, type=float, default=(0, 0, 0, 0, 0), metavar=("K1", "K2", "P1", "P2", "K3"))
-    parser.add_argument("--fov-deg", type=float, default=65.0, help="Approximate horizontal FOV when no calibration is supplied")
+    parser.add_argument("--fov-deg", type=float, default=72.0, help="Approximate horizontal FOV when no calibration is supplied")
     parser.add_argument("--no-mpr", action="store_true")
+    parser.add_argument("--ct-validation", action="store_true",
+                        help="Frozen PASS frame; compare live and CT marker positions (research only)")
+    parser.add_argument("--validation-output", type=Path,
+                        default=DATA_DIR / "output_ct_validation" / "measurements.csv")
     parser.add_argument("--no-3d", action="store_true", help="hide live 3D match coverage window")
+    parser.add_argument("--show-gs-pose-render", action="store_true",
+                        help="render the true 3DGS appearance at each verified PnP pose in a separate process")
+    parser.add_argument("--gs-pose-render-hz", type=float, default=5.0,
+                        help="maximum asynchronous true-3DGS pose-preview rate")
     parser.add_argument(
         "--debug-3d-fps",
         type=float,
@@ -1534,6 +1892,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             or args.height < 0
             or args.max_processing_width < 0
             or args.debug_3d_fps <= 0
+            or not 0.1 <= args.gs_pose_render_hz <= 10
+            or (args.show_gs_pose_render and args.matching_mode != 'splat-track')
             or args.min_focus_score < 0
             or args.reference_shortlist <= 0
             or args.reference_neighbors < 2
@@ -1552,6 +1912,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 or args.retrieval_roi[0] + args.retrieval_roi[2] > 1
                 or args.retrieval_roi[1] + args.retrieval_roi[3] > 1))
             or args.glb_max_keypoints <= 0
+            or args.virtual_guided_features < 32
+            or not math.isfinite(args.virtual_guided_radius)
+            or args.virtual_guided_radius <= 0
             or args.glb_resize <= 0
             or args.glb_match_threshold < 0
             or args.glb_xyz_search_radius < 0
@@ -1561,6 +1924,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             or not math.isfinite(args.virtual_max_coarse_rotation)
             or not 0 < args.virtual_max_coarse_rotation <= 180
             or args.tracking_reseed_frames <= 0
+            or args.tracking_replenish_frames < 0
+            or not math.isfinite(args.tracking_replenish_distance_mm)
+            or args.tracking_replenish_distance_mm <= 0
+            or not math.isfinite(args.tracking_replenish_height_mm)
+            or args.tracking_replenish_height_mm <= 0
+            or not math.isfinite(args.tracking_replenish_cooldown)
+            or args.tracking_replenish_cooldown <= 0
+            or not math.isfinite(args.tracking_replenish_image_coverage)
+            or not 0 <= args.tracking_replenish_image_coverage <= 1
+            or not math.isfinite(args.tracking_replenish_angle)
+            or not 0 < args.tracking_replenish_angle <= 180
             or args.tracking_min_points < 4
             or args.tracking_flow_window < 5
             or args.tracking_flow_window % 2 == 0

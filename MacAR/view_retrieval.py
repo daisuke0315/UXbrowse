@@ -1,7 +1,7 @@
 """Object-region SIFT or DINOv2 retrieval over virtual camera views.
 
-Only the coarse shortlist changes. Local matching, XYZ transfer and pose QC
-continue to use the original, uncropped image and reference coordinates.
+The virtual-view localizer can also crop live ALIKED extraction to the
+detected object; matched coordinates are restored before XYZ transfer/PnP.
 """
 
 from __future__ import annotations
@@ -9,14 +9,16 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+import time
 from pathlib import Path
 
 import cv2
 import numpy as np
 from object_roi import GSObjectDetector, reference_rgb_mask
+from patch_view_rerank import GRID_SIDE, SHORTLIST, square_mask, rerank, select_diverse
 
 
-MODES = ("sift", "dino-global", "dino-spatial")
+MODES = ("sift", "dino-global", "dino-spatial", "dino-patch")
 DEFAULT_ROI = (0.10, 0.10, 0.80, 0.80)  # x, y, width, height, fractions
 
 
@@ -71,7 +73,7 @@ class DINOv2Encoder:
     repository = "facebookresearch/dinov2:b48308a394a04ccb9c4dd3a1f0a4daa1ce0579b8"
 
     def __init__(self, mode, device="auto", model=None):
-        if mode not in {"dino-global", "dino-spatial"}:
+        if mode not in {"dino-global", "dino-spatial", "dino-patch"}:
             raise ValueError(f"Unknown DINOv2 descriptor: {mode}")
         try:
             import torch
@@ -108,7 +110,7 @@ class DINOv2Encoder:
         with self.lock, torch.inference_mode():
             features = self.model.forward_features(tensor)
             cls = features["x_norm_clstoken"][0]
-            if self.mode == "dino-global":
+            if self.mode in {"dino-global", "dino-patch"}:
                 vector = cls
             else:
                 patches = features["x_norm_patchtokens"][0]
@@ -125,6 +127,27 @@ class DINOv2Encoder:
         if not np.isfinite(vector).all() or not np.isfinite(norm) or norm < 1e-12:
             raise RuntimeError("DINOv2 returned an invalid embedding")
         return (vector / norm).astype(np.float32)
+
+    def encode_tokens(self, bgr):
+        """Global vector + spatial patches from the SAME cropped-image forward."""
+        torch = self.torch
+        rgb = square_rgb(bgr)
+        tensor = torch.from_numpy(np.ascontiguousarray(rgb)).to(self.device)
+        tensor = tensor.permute(2, 0, 1).unsqueeze(0).float()/255.
+        tensor = (tensor-self.mean)/self.std
+        with self.lock, torch.inference_mode():
+            features = self.model.forward_features(tensor)
+            cls = features['x_norm_clstoken'][0].float().cpu().numpy()
+            patches = features['x_norm_patchtokens'][0].float().cpu().numpy()
+        side = int(round(np.sqrt(len(patches))))
+        if side != GRID_SIDE or not np.isfinite(patches).all() or not np.isfinite(cls).all():
+            raise RuntimeError('Unexpected/invalid DINO patch layout')
+        pooled = patches.reshape(GRID_SIDE, GRID_SIDE, -1)
+        norm = float(np.linalg.norm(cls))
+        if norm < 1e-8:
+            raise RuntimeError('Invalid DINO global embedding')
+        pooled /= np.maximum(np.linalg.norm(pooled, axis=-1, keepdims=True), 1e-8)
+        return (cls/norm).astype(np.float32), pooled.astype(np.float32)
 
     def patch_grid(self, bgr, max_side=448):
         """L2-normalized dense patch descriptors on an aspect-preserving grid."""
@@ -182,6 +205,8 @@ class ViewRetrievalIndex:
                          if auto_roi else None)
         self.last_query_bbox = None
         self.last_detection = None
+        self.last_query_tokens = None
+        self.query_max_width = None  # Photo analysis only; live defaults are unchanged.
 
     def _reference_crop(self, image, view):
         if not self.crop:
@@ -201,13 +226,15 @@ class ViewRetrievalIndex:
                 file = self.views_path / str(name)
                 stat = file.stat()
                 manifest.append((str(name), stat.st_size, stat.st_mtime_ns))
-        key = json.dumps(("v2-rgb-mask", self.mode, self.crop,
+        key = json.dumps(("v4-patch16-masked" if self.mode == 'dino-patch' else "v2-rgb-mask", self.mode, self.crop,
                           getattr(self.encoder, "model_name", None),
                           getattr(self.encoder, "repository", None), manifest),
                          sort_keys=True).encode()
         return self.views_path / ".view_retrieval_cache" / (hashlib.sha256(key).hexdigest() + ".npz")
 
     def _build_index(self):
+        if self.mode == 'dino-patch':
+            return self._build_patch_index()
         if self.mode != "sift":
             cache = self._cache_path()
             if cache.exists():
@@ -242,6 +269,47 @@ class ViewRetrievalIndex:
         temporary.replace(cache)
         return values
 
+    def _build_patch_index(self):
+        cache = self._cache_path()
+        if cache.is_file():
+            try:
+                with np.load(cache, allow_pickle=False) as data:
+                    values, patches, masks = data['embeddings'], data['patches'], data['masks']
+                if (values.ndim != 2 or values.shape[0] != len(self.views) or
+                    patches.shape != (len(self.views), GRID_SIDE, GRID_SIDE, values.shape[1]) or
+                    masks.shape != patches.shape[:3] or
+                    not np.isfinite(values).all() or not np.isfinite(patches).all() or
+                    not np.all(np.abs(np.linalg.norm(values, axis=1)-1.) < 1e-3)):
+                    raise ValueError('Invalid patch index')
+                self.reference_patches, self.reference_masks = patches, masks.astype(bool)
+                return values
+            except (OSError, ValueError, KeyError):
+                pass
+        vectors, grids, masks = [], [], []
+        for view in self.views:
+            image = cv2.imread(str(self.views_path/view['image_name']))
+            if image is None:
+                raise RuntimeError(f"Cannot read reference image: {view['image_name']}")
+            mask = reference_rgb_mask(image)
+            bbox = object_bbox(mask) if self.crop else None
+            cropped, cropped_mask = crop_box(image, bbox), crop_box(mask, bbox)
+            vector, patches = self.encoder.encode_tokens(cropped)
+            vectors.append(vector)
+            grids.append(patches)
+            masks.append(square_mask(cropped_mask))
+        values = np.stack(vectors).astype(np.float32)
+        self.reference_patches = np.stack(grids).astype(np.float32)
+        self.reference_masks = np.stack(masks).astype(bool)
+        try:
+            cache.parent.mkdir(exist_ok=True)
+            temporary = cache.with_suffix('.tmp.npz')
+            np.savez_compressed(temporary, embeddings=values, patches=self.reference_patches,
+                                masks=self.reference_masks)
+            temporary.replace(cache)
+        except OSError:
+            pass  # A read-only dataset still works; the RAM index is valid.
+        return values
+
     def rank(self, image, top_k=None, excluded=(), include_zero=False):
         """Return [(score, -tie_break, index)], query feature count, full ranking."""
         with self.rank_lock:
@@ -249,10 +317,15 @@ class ViewRetrievalIndex:
                 image, top_k, excluded, include_zero, preview=False)
             return ranked, count, all_ranked
 
-    def rank_debug(self, image, top_k=None, excluded=(), include_zero=False):
+    def rank_debug(self, image, top_k=None, excluded=(), include_zero=False,
+                   capture_query_tokens=False):
         """Rank and return the exact square RGB input used by the embedding."""
         with self.rank_lock:
-            return self._rank(image, top_k, excluded, include_zero, preview=True)
+            result = self._rank(image, top_k, excluded, include_zero, preview=True)
+            if capture_query_tokens:
+                # Snapshot before the viewer can rank a different frame on this index.
+                result[3]['_query_tokens'] = self.last_query_tokens
+            return result
 
     def reference_preview(self, index):
         view = self.views[index]
@@ -262,7 +335,26 @@ class ViewRetrievalIndex:
         image = self._reference_crop(image, view)
         return cv2.cvtColor(square_rgb(image), cv2.COLOR_RGB2BGR)
 
+    def _query_image(self, image):
+        limit = self.query_max_width
+        if limit and image.shape[1] > limit:
+            height = max(1, round(image.shape[0] * limit / image.shape[1]))
+            return cv2.resize(image, (limit, height), interpolation=cv2.INTER_AREA)
+        return image
+
+    def detect_query(self, image):
+        """Fixed-reference ROI detection uses the same photo analysis scale.
+
+        The returned bbox and compact mask stay normalized to the full image.
+        No resized pixel coordinates are passed to fine matching or PnP.
+        """
+        return self.detector.detect(self._query_image(image))
+
     def _rank(self, image, top_k, excluded, include_zero, preview):
+        started = time.perf_counter()
+        image = self._query_image(image)
+        self.last_query_tokens = None
+        input_shape = image.shape[:2]
         detection = None
         bbox = None
         if self.crop:
@@ -304,8 +396,11 @@ class ViewRetrievalIndex:
                                    if accepted else -float("inf"), index))
             count = len(keypoints)
         else:
-            query = self.encoder.encode(image)
-            # Only 72 views: float64 accumulation is cheap and avoids spurious
+            if self.mode == 'dino-patch':
+                query, patches = self.encoder.encode_tokens(image)
+            else:
+                query = self.encoder.encode(image)
+            # The reference set is small enough that float64 accumulation avoids
             # Accelerate/BLAS float32 overflow warnings observed on macOS.
             scores = np.einsum("ij,j->i", self.reference, query,
                                dtype=np.float64, optimize=False)
@@ -313,6 +408,42 @@ class ViewRetrievalIndex:
                       if index not in excluded]
             count = 0
         ranked.sort(reverse=True)
+        if self.mode == 'dino-patch':
+            global_ranked = list(ranked)
+            # Use the detector's object mask, cropped by exactly the embedding ROI.
+            # Without a detector, valid crop pixels exclude letterbox padding.
+            full_mask = (detection or {}).get('mask')
+            if full_mask is None:
+                mask = np.ones(image.shape[:2], np.uint8)
+            else:
+                full_mask = cv2.resize(full_mask.astype(np.uint8),
+                                      (input_shape[1], input_shape[0]), interpolation=cv2.INTER_NEAREST)
+                mask = crop_box(full_mask, bbox)
+            query_mask = square_mask(mask)
+            # Shared only with the same engine's registered-photo selection;
+            # keep arrays out of public crop/debug JSON.
+            self.last_query_tokens = (query, patches, query_mask)
+            rerank_started = time.perf_counter()
+            shortlist = ranked[:max(SHORTLIST, top_k or 0)]
+            ranked, rows = rerank(shortlist, patches, query_mask,
+                                  self.reference_patches, self.reference_masks)
+            patch_top1 = ranked[0][2] if ranked else None
+            selected = select_diverse(ranked, self.views, min(top_k or 3, len(ranked)))
+            selected_ids = [entry[2] for entry in selected]
+            ranked = selected + [entry for entry in ranked if entry[2] not in selected_ids]
+            for row in rows:
+                row['image_name'] = self.views[row['index']]['image_name']
+                row['fine_selected'] = row['index'] in selected_ids
+            debug['patch_rerank'] = dict(
+                global_top1_index=global_ranked[0][2] if global_ranked else None,
+                reranked_top1_index=patch_top1,
+                selected_indices=selected_ids,
+                selected_images=[self.views[index]['image_name'] for index in selected_ids],
+                diversity_angle_deg=35.,
+                shortlist=len(shortlist), fine_candidates=top_k,
+                patch_grid=GRID_SIDE, query_foreground_patches=int(query_mask.sum()),
+                rerank_ms=(time.perf_counter()-rerank_started)*1000., rows=rows,
+                retrieval_ms=(time.perf_counter()-started)*1000.)
         if preview and ranked:
             debug['reference_preview'] = self.reference_preview(ranked[0][2])
             debug['reference_name'] = self.views[ranked[0][2]]['image_name']

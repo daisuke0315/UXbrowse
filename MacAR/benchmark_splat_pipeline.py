@@ -28,7 +28,7 @@ def main():
     parser.add_argument('--holdout', nargs='*', type=int, default=[])
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--top-k', type=int, default=10)
-    parser.add_argument('--retrieval-mode', choices=('sift', 'dino-global', 'dino-spatial'),
+    parser.add_argument('--retrieval-mode', choices=('sift', 'dino-global', 'dino-spatial', 'dino-patch'),
                         default='sift')
     parser.add_argument('--retrieval-crop', action='store_true')
     parser.add_argument('--retrieval-auto-roi', action='store_true')

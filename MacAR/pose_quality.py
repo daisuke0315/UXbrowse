@@ -1,11 +1,12 @@
 """Image-space pose checks. Passing these does not certify CT registration/TRE."""
 import cv2
 import numpy as np
+from pose_observability import rotation_sensitivity
 
 
 def assess_pose(object_points, image_points, rvec, tvec, indices, image_shape,
                 matrix, distortion, min_inliers, min_ratio, max_error,
-                min_coverage=0.005):
+                min_coverage=0.005, max_p95_error=None):
     indices = np.asarray(indices, int)
     reasons = []
     if len(indices) < min_inliers:
@@ -14,6 +15,7 @@ def assess_pose(object_points, image_points, rvec, tvec, indices, image_shape,
     if ratio < min_ratio:
         reasons.append('low_inlier_ratio')
     coverage, spread, mean, p95 = 0.0, 0.0, None, None
+    sensitivity = None
     if len(indices) >= 4:
         xyz = np.asarray(object_points)[indices]
         uv = np.asarray(image_points)[indices]
@@ -22,6 +24,8 @@ def assess_pose(object_points, image_points, rvec, tvec, indices, image_shape,
         mean, p95 = float(np.mean(errors)), float(np.percentile(errors, 95))
         if not np.isfinite(errors).all() or mean > max_error:
             reasons.append('reprojection_error')
+        if max_p95_error is not None and (not np.isfinite(p95) or p95 > max_p95_error):
+            reasons.append('reprojection_tail')
         depth = (np.einsum('ni,ji->nj', xyz, cv2.Rodrigues(rvec)[0]) + np.asarray(tvec).reshape(3))[:, 2]
         if not np.isfinite(depth).all() or np.any(depth <= 0):
             reasons.append('behind_camera')
@@ -33,6 +37,8 @@ def assess_pose(object_points, image_points, rvec, tvec, indices, image_shape,
         spread = float(singular[1] / max(singular[0], 1e-12))
         if spread < 0.01:
             reasons.append('collinear_3d_support')
+        sensitivity = rotation_sensitivity(xyz, rvec, tvec, matrix, distortion)
     return dict(passed=not reasons, reasons=reasons, inliers=int(len(indices)),
                 inlier_ratio=float(ratio), coverage=coverage, spread_3d=spread,
-                mean_error=mean, p95_error=p95)
+                mean_error=mean, p95_error=p95, max_p95_error=max_p95_error,
+                rotation_sensitivity_deg_per_px=sensitivity)

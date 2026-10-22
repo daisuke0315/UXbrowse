@@ -16,10 +16,46 @@ from generate_glb_reference_views import (  # noqa: E402
 )
 from glb_virtual_view_pnp import sample_xyz_buffer  # noqa: E402
 from glb_virtual_view_pnp import VirtualTransfer  # noqa: E402
-from glb_virtual_live import GLBVirtualLiveLocalizer  # noqa: E402
+from glb_virtual_live import (GLBVirtualLiveLocalizer,
+                              object_scale_geometric_filter)  # noqa: E402
+from unittest.mock import patch
 
 
 class LearnedMatchingTests(unittest.TestCase):
+    def test_object_geometry_uses_equal_crop_scale_without_changing_source_coordinates(self):
+        query = np.asarray([[2000., 1000.]], np.float32)
+        reference = np.asarray([[200., 100.]], np.float32)
+        scores = np.asarray([.9], np.float32)
+        with patch('glb_virtual_live.geometric_filter',
+                   side_effect=lambda q, r, s, threshold: (q, r, s)) as matcher:
+            output = object_scale_geometric_filter(query, reference, scores, 3.,
+                                                  (4000, 3000, 3), (400, 300, 3))
+        np.testing.assert_allclose(matcher.call_args.args[0], [[512., 256.]])
+        np.testing.assert_allclose(matcher.call_args.args[1], [[512., 256.]])
+        np.testing.assert_allclose(output[0], query)
+        np.testing.assert_allclose(output[1], reference)
+        self.assertEqual(matcher.call_args.args[3], 3.)
+
+    def test_reference_crop_offset_is_restored_for_xyz_sampling(self):
+        import torch
+        localizer = GLBVirtualLiveLocalizer.__new__(GLBVirtualLiveLocalizer)
+        localizer.source_type = '3dgs'
+        localizer.pipeline_policy = 'validated'
+        localizer.retrieval_crop = True
+        localizer.resize = 1024
+        localizer.reference_offsets = {2: (100, 50)}
+        localizer.reference_feature_xyz = {}
+        localizer.geometry_cache = {}
+        localizer.xyz_search_radius = 0
+        localizer._xyz = lambda index: np.zeros((100, 200, 3))
+        localizer._source_xyz_to_runtime = lambda values: values
+        features = {'keypoints': torch.tensor([[[10., 15.]]])}
+        with patch('glb_virtual_live.sample_xyz_buffer',
+                   return_value=([(1., 2., 3.)], [0])) as sample:
+            mapped = localizer._feature_xyz(2, features)
+        np.testing.assert_allclose(sample.call_args.args[0], [[110., 65.]])
+        np.testing.assert_allclose(mapped, [[1., 2., 3.]])
+
     def test_depth_unprojection_uses_opengl_negative_z(self):
         depth = np.asarray(((2.0,),), dtype=np.float32)
         matrix = np.eye(3, dtype=np.float64)

@@ -69,9 +69,9 @@ const applyCamera = (nextEye, nextTarget, nextUp, nextFov = fov) => {
     app.renderNextFrame = true;
 };
 
-window.setCamera = (nextEye, nextTarget, nextUp, nextFov) => new Promise(resolve => {
+window.setCamera = (nextEye, nextTarget, nextUp, nextFov, settleFrames = 8) => new Promise(resolve => {
     applyCamera(nextEye, nextTarget, nextUp, nextFov);
-    let remaining = 8;
+    let remaining = Math.max(1, Math.round(settleFrames));
     const onFrameEnd = () => {
         remaining -= 1;
         if (remaining <= 0) {

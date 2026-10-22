@@ -22,7 +22,8 @@ class SplatPoseViewer:
         (2, 6), (3, 7), (4, 5), (4, 6), (5, 7), (6, 7),
     )
 
-    def __init__(self, localizer, *, height: int = 600) -> None:
+    def __init__(self, localizer, *, height: int = 600,
+                 show_pose_render: bool = False) -> None:
         source = localizer.global_localizer
         self.to_runtime = source._source_xyz_to_runtime
         self.views_path = Path(source.views_path)
@@ -32,6 +33,7 @@ class SplatPoseViewer:
         self.view_by_name = {str(view["image_name"]): view for view in self.views}
         self.height = height
         self.live_width = 440
+        self.pose_render_width = 440 if show_pose_render else 0
         self.map_width = 500
         self.reference_width = 300
         bounds = np.asarray(source.manifest["bounds"], dtype=np.float64)
@@ -54,6 +56,39 @@ class SplatPoseViewer:
         self.last_pose_center = None
         self.last_reference_name = None
         self.last_reference_camera_center = None
+
+    def _pose_render_panel(self, image, age_ms, render_ms, status, verified):
+        panel = np.full((self.height, self.pose_render_width, 3), 24, np.uint8)
+        cv2.rectangle(panel, (0, 0), (self.pose_render_width, 70), (28, 28, 28), -1)
+        self._text(panel, "3DGS AT LIVE PnP POSE", 12, 27,
+                   size=.59, thickness=2)
+        fresh = (verified and image is not None and age_ms is not None
+                 and age_ms <= 1500.)
+        if fresh:
+            height, width = image.shape[:2]
+            scale = min(self.pose_render_width / width,
+                        (self.height - 60) / height)
+            resized = cv2.resize(image, (max(1, round(width * scale)),
+                                         max(1, round(height * scale))))
+            left = (self.pose_render_width - resized.shape[1]) // 2
+            top = 50 + (self.height - 60 - resized.shape[0]) // 2
+            panel[top:top + resized.shape[0], left:left + resized.shape[1]] = resized
+            self._text(panel, f"PASS | pose age {age_ms:.0f} ms | render {render_ms:.0f} ms",
+                       12, 53, color=(55, 225, 70), size=.43)
+        else:
+            reason = ('WAIT FOR CURRENT PASS' if not verified else
+                      'WAITING FOR GAUSSIAN FRAME' if image is None else
+                      'STALE - camera moved')
+            self._text(panel, reason, 12, 53, color=(0, 180, 255), size=.45)
+            if status != 'READY':
+                self._text(panel, status[:52], 12, self.height // 2, size=.42)
+        cv2.rectangle(panel, (0, self.height - 58),
+                      (self.pose_render_width, self.height), (28, 28, 28), -1)
+        self._text(panel, "Appearance QC only; not a pose correction", 12,
+                   self.height - 35, size=.39)
+        self._text(panel, "Centered K; lens distortion not rendered", 12,
+                   self.height - 14, size=.39)
+        return panel
 
     def _load_colored_points(self, source):
         """Sample only a small fixed subset; no Gaussian rendering in the UI loop."""
@@ -221,7 +256,9 @@ class SplatPoseViewer:
 
     def render(self, live_frame, current_result, *, search_result=None,
                diagnostics=None, candidate_age_ms=0., active_reference_name=None,
-               coarse_reference_name=None, coarse_margin=0., coarse_mode="sift"):
+               coarse_reference_name=None, coarse_margin=0., coarse_mode="sift",
+               gs_image=None, gs_age_ms=None, gs_render_ms=0.,
+               gs_status="DISABLED"):
         diagnostics = diagnostics or {}
         verified = (current_result is not None and current_result.status == "PASS")
         selected_result = current_result if verified else search_result
@@ -270,8 +307,12 @@ class SplatPoseViewer:
                        "Example view; not selected")
             self._text(reference_panel, message, 10,
                        self.height - 38, size=.40)
-        canvas = np.hstack((np.empty((self.height, self.live_width, 3), dtype=np.uint8),
-                            map_panel, reference_panel))
+        panels = [np.empty((self.height, self.live_width, 3), dtype=np.uint8)]
+        if self.pose_render_width:
+            panels.append(self._pose_render_panel(
+                gs_image, gs_age_ms, gs_render_ms, gs_status, verified))
+        panels.extend((map_panel, reference_panel))
+        canvas = np.hstack(panels)
         return self.update_live(canvas, live_frame)
 
     def update_live(self, canvas, live_frame):
@@ -287,6 +328,16 @@ class SplatPoseViewer:
             panel[y:y + resized.shape[0], x:x + resized.shape[1]] = resized
         cv2.rectangle(panel, (0, 0), (self.live_width, 42), (28, 28, 28), -1)
         self._text(panel, "LIVE CAMERA", 12, 28, size=.65, thickness=2)
+        return canvas
+
+    def update_pose_render(self, canvas, image, age_ms, render_ms, status,
+                           *, verified: bool):
+        """Refresh only the true-Gaussian pane; leave the 3D map unchanged."""
+        if not self.pose_render_width:
+            return canvas
+        start = self.live_width
+        canvas[:, start:start + self.pose_render_width] = self._pose_render_panel(
+            image, age_ms, render_ms, status, verified)
         return canvas
 
     def handle_key(self, key: int) -> bool:

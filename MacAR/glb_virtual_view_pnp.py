@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import csv
 import json
@@ -28,9 +30,8 @@ from aliked_lightglue_pnp import (
 from realtime_pnp import approximate_camera_matrix
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_VIEWS = SCRIPT_DIR / "output_glb_reference_views"
-DEFAULT_OUTPUT = SCRIPT_DIR / "output_glb_virtual_pnp"
+DEFAULT_VIEWS = DATA_DIR / "output_glb_reference_views"
+DEFAULT_OUTPUT = DATA_DIR / "output_glb_virtual_pnp"
 
 
 class VirtualViewError(RuntimeError):

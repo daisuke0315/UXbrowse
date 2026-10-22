@@ -97,6 +97,53 @@ class GSObjectDetector:
         self.background = _centers(bg, 8)
 
     def detect(self, image):
+        bbox, finding = self._detect_region(image)
+        finding['search_pass'] = 'full'
+        trials = [self._trial(finding, (0., 0., 1., 1.))]
+        finding['trials'] = trials
+        if bbox is not None:
+            return bbox, finding
+        height, width = image.shape[:2]
+        tile_width, tile_height = max(1, round(width*.6)), max(1, round(height*.6))
+        candidates = []
+        for top in (0, height-tile_height):
+            for left in (0, width-tile_width):
+                region = (left/width, top/height, tile_width/width, tile_height/height)
+                tile_bbox, tile_finding = self._detect_region(
+                    image[top:top+tile_height, left:left+tile_width])
+                trials.append(self._trial(tile_finding, region))
+                if tile_bbox is None:
+                    continue
+                x, y, w, h = tile_bbox
+                world_bbox = (region[0]+x*region[2], region[1]+y*region[3],
+                              w*region[2], h*region[3])
+                # A compact full-image grid retains the tile's effective resolution;
+                # callers resize this mask to their own processing image.
+                mask = tile_finding['mask']
+                rows = max(mask.shape[0], round(mask.shape[0]/region[3]))
+                columns = max(mask.shape[1], round(mask.shape[1]/region[2]))
+                full_mask = np.zeros((rows, columns), np.uint8)
+                x0, y0 = round(region[0]*columns), round(region[1]*rows)
+                x1 = round((region[0]+region[2])*columns)
+                y1 = round((region[1]+region[3])*rows)
+                full_mask[y0:y1, x0:x1] = cv2.resize(mask, (x1-x0, y1-y0),
+                                                    interpolation=cv2.INTER_NEAREST)
+                tile_finding.update(mask=full_mask, search_pass='tile', region=region)
+                candidates.append((world_bbox, tile_finding))
+        if not candidates:
+            finding.update(search_pass='tiles', trials=trials)
+            return None, finding
+        bbox, finding = max(candidates, key=lambda item:
+                            (item[1]['confidence'], item[1]['patch_count']))
+        finding['trials'] = trials
+        return bbox, finding
+
+    @staticmethod
+    def _trial(finding, region):
+        return dict(region=region, **{key: value for key, value in finding.items()
+                                     if key not in ('mask', 'trials', 'search_pass')})
+
+    def _detect_region(self, image):
         patches = self.encoder.patch_grid(image)
         rows, columns = patches.shape[:2]
         flat = patches.reshape(-1, patches.shape[-1]).astype(np.float64)

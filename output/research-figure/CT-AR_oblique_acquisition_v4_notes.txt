@@ -1,0 +1,13 @@
+Coordinate-projected 3-D scientific schematic. No experimental image was modified.
+Positions and distances illustrate the described elevated corner acquisition, not measured camera extrinsics.
+Each phone imaging plane is perpendicular to its inward/downward optical axis.
+Near phones correctly show their screens because their imaging lenses face away from the illustration observer.
+The lower four cube projections use the same corresponding camera directions.
+
+View 1: elevated corner viewpoint; three visible faces; axis residual 0.00e+00
+View 2: elevated corner viewpoint; three visible faces; axis residual 0.00e+00
+View 3: elevated corner viewpoint; three visible faces; axis residual 0.00e+00
+View 4: elevated corner viewpoint; three visible faces; axis residual 0.00e+00
+
+Caption:
+Schematic of image acquisition from four elevated oblique viewpoints around the phantom. At each viewpoint, the top face and two adjacent side faces were visible. A single iPhone 15 Pro RGB camera was moved sequentially between viewpoints, and three images were acquired at each viewpoint (12 in total). The lower panels illustrate the corresponding viewing directions. Camera positions, distances, and proportions are schematic.

@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import csv
 import math
@@ -19,11 +21,10 @@ from realtime_pnp import approximate_camera_matrix
 from realtime_pnp_server import DEFAULT_FEATURES
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_QUERY = Path("/Users/daisuketanii/Downloads/IMG_2532.jpeg")
-DEFAULT_IMAGES = SCRIPT_DIR / "colmap_image" / "Images.txt"
-DEFAULT_REFERENCE_DIR = SCRIPT_DIR / "colmap_image"
-DEFAULT_OUTPUT = SCRIPT_DIR / "output_colmap_image" / "reference_guided_pnp"
+DEFAULT_IMAGES = DATA_DIR / "colmap_image" / "Images.txt"
+DEFAULT_REFERENCE_DIR = DATA_DIR / "colmap_image"
+DEFAULT_OUTPUT = DATA_DIR / "output_colmap_image" / "reference_guided_pnp"
 
 
 class ReferenceGuidedError(RuntimeError):

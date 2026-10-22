@@ -23,7 +23,9 @@ from realtime_pnp import (  # noqa: E402
     approximate_camera_matrix,
     build_parser,
     center_focus_score,
+    draw_aliked_object_window,
     open_camera,
+    read_camera_startup,
     resize_for_processing,
     scaled_calibration,
 )
@@ -42,6 +44,15 @@ from realtime_pnp_server import (  # noqa: E402
 
 
 class RealtimePnPTests(unittest.TestCase):
+    def test_aliked_object_window_shows_live_and_matched_crops(self):
+        frame = np.zeros((100, 200, 3), np.uint8)
+        frame[20:80, 50:150] = (0, 180, 255)
+        matched = np.full((60, 100, 3), (0, 180, 255), np.uint8)
+        panel = draw_aliked_object_window(frame, (.25, .2, .5, .6), matched)
+        self.assertEqual(panel.shape, (410, 800, 3))
+        self.assertGreater(int(panel[210, 200].sum()), 100)
+        self.assertGreater(int(panel[210, 600].sum()), 100)
+
     def test_mpr_controls_change_extended_slice_and_opacity(self):
         renderer = MPRRenderer.__new__(MPRRenderer)
         renderer.slice_fraction = 0.5
@@ -239,6 +250,27 @@ class RealtimePnPTests(unittest.TestCase):
         self.assertEqual(args.matching_mode, "splat-track")
         self.assertEqual(args.splat_views, Path("splat72"))
         self.assertEqual(args.glb_top_k, 10)
+
+    def test_3dgs_default_reference_is_original_upper_v2(self):
+        args = build_parser().parse_args(("--matching-mode", "splat-track"))
+        self.assertEqual(
+            args.splat_views.name,
+            "output_3dgs_reference_views_72_upper_negz_v2",
+        )
+        self.assertEqual(args.tracking_replenish_frames, 30)
+        self.assertEqual(args.tracking_replenish_mode, 'coverage')
+        self.assertEqual(args.tracking_replenish_distance_mm, 30.)
+        self.assertEqual(args.tracking_replenish_height_mm, 15.)
+
+    def test_true_gaussian_pose_preview_is_opt_in_and_rate_limited(self):
+        default = build_parser().parse_args(("--matching-mode", "splat-track"))
+        self.assertFalse(default.show_gs_pose_render)
+        args = build_parser().parse_args((
+            "--matching-mode", "splat-track", "--show-gs-pose-render",
+            "--gs-pose-render-hz", "1",
+        ))
+        self.assertTrue(args.show_gs_pose_render)
+        self.assertEqual(args.gs_pose_render_hz, 1.)
 
     def test_async_reference_localizer_does_not_block_camera_loop(self):
         debug = LocalizationDebug(
@@ -572,6 +604,45 @@ class RealtimePnPTests(unittest.TestCase):
         image = viewer.render(debug, "PASS")
         self.assertEqual(image.shape, (480, 640, 3))
         self.assertGreater(int(image.max()), 0)
+
+
+class CameraReconnectTests(unittest.TestCase):
+    def test_startup_retries_empty_initial_frames_without_changing_focus(self):
+        image=np.zeros((5,6,3),np.uint8)
+        capture=SimpleNamespace(read=mock.Mock(side_effect=[(False,None),(True,None),(True,image)]))
+        with mock.patch('realtime_pnp.time.sleep') as sleep:
+            ok,actual=read_camera_startup(capture)
+        self.assertTrue(ok)
+        self.assertIs(actual,image)
+        self.assertEqual(capture.read.call_count,3)
+        self.assertEqual(sleep.call_count,2)
+
+    def test_failed_startup_has_finite_read_attempts(self):
+        capture=SimpleNamespace(read=mock.Mock(return_value=(False,None)))
+        with mock.patch('realtime_pnp.time.sleep'):
+            self.assertEqual(read_camera_startup(capture),(False,None))
+        self.assertEqual(capture.read.call_count,20)
+
+    def test_reopen_releases_failed_native_capture_before_retry(self):
+        closed=mock.Mock();closed.isOpened.return_value=False
+        opened=mock.Mock();opened.isOpened.return_value=True
+        with mock.patch('realtime_pnp.cv2.VideoCapture',side_effect=[closed,opened]) as create, mock.patch('realtime_pnp.time.sleep'):
+            capture=OpenCVDirectCapture(1,0,0)
+        closed.release.assert_called_once()
+        self.assertEqual(create.call_count,2)
+        opened.set.assert_not_called()
+        capture.release()
+
+    def test_open_failure_releases_all_handles_and_stops_retrying(self):
+        handles=[mock.Mock() for _ in range(3)]
+        for handle in handles:
+            handle.isOpened.return_value=False
+        with mock.patch('realtime_pnp.cv2.VideoCapture',side_effect=handles) as create, mock.patch('realtime_pnp.time.sleep'):
+            with self.assertRaisesRegex(LivePnPError,'could not be opened'):
+                OpenCVDirectCapture(1,0,0)
+        self.assertEqual(create.call_count,3)
+        for handle in handles:
+            handle.release.assert_called_once()
 
 
 if __name__ == "__main__":

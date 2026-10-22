@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 
 from glb_virtual_view_pnp import load_manifest
-from view_retrieval import ViewRetrievalIndex
+from view_retrieval import MODES, ViewRetrievalIndex
 
 
 def rotation_error(a, b):
@@ -33,12 +33,13 @@ def run(views_path, query_path, indices, mode, crop, roi, device, auto_roi=False
         image = cv2.imread(str(query_path / query_view["image_name"]))
         if image is None:
             raise RuntimeError(f"Could not read query {query_view['image_name']}")
-        excluded = ({i for i, view in enumerate(views)
-                     if view.get("azimuth_deg") == query_view.get("azimuth_deg")
-                     and view.get("elevation_deg") == query_view.get("elevation_deg")}
-                    if query_path.resolve() == views_path.resolve() else set())
+        # Different folders may still contain hard-linked copies of the same
+        # reference images. Exclude identical camera rotations in both cases;
+        # an overhead camera can have many different in-plane roll angles.
+        excluded = {i for i, view in enumerate(views)
+                    if rotation_error(rotations[i], query_rotation) < 0.1}
         started = time.perf_counter()
-        ranked, _, _ = retriever.rank(image, top_k=10, excluded=excluded)
+        ranked, _, all_ranked, debug = retriever.rank_debug(image, top_k=3, excluded=excluded)
         elapsed_ms = (time.perf_counter() - started) * 1000
         if not ranked:
             rows.append(dict(query=query_view["image_name"], index=query_index,
@@ -46,13 +47,19 @@ def run(views_path, query_path, indices, mode, crop, roi, device, auto_roi=False
                              detected_bbox=retriever.last_query_bbox))
             continue
         angles = [rotation_error(rotations[view_index], query_rotation)
-                  for _, _, view_index in ranked]
+                  for _, _, view_index in all_ranked[:10]]
+        fine_angles = [rotation_error(rotations[view_index], query_rotation)
+                       for _, _, view_index in ranked]
         rows.append(dict(query=query_view["image_name"], index=query_index,
                          excluded=sorted(excluded),
                          top1=views[ranked[0][2]]["image_name"],
                          top1_score=float(ranked[0][0]),
                          detected_bbox=retriever.last_query_bbox,
                          top1_rotation_deg=angles[0],
+                         top3_min_rotation_deg=min(fine_angles),
+                         fine_candidates=[views[index]['image_name'] for _,_,index in ranked],
+                         patch_rerank={key:value for key,value in debug.get('patch_rerank',{}).items()
+                                       if key != 'rows'},
                          top5_min_rotation_deg=min(angles[:5]),
                          top10_min_rotation_deg=min(angles),
                          retrieval_ms=elapsed_ms))
@@ -63,6 +70,8 @@ def run(views_path, query_path, indices, mode, crop, roi, device, auto_roi=False
                    index_ms=index_ms,
                    top1_mean_rotation_deg=float(np.mean([r["top1_rotation_deg"] for r in valid]))
                    if valid else None,
+                   top3_near_rate=float(np.mean([r['top3_min_rotation_deg'] <= 30.0001
+                                                  for r in valid])) if valid else None,
                    top5_near_rate=float(np.mean([r["top5_min_rotation_deg"] <= 30.0001
                                                   for r in valid])) if valid else None,
                    top10_near_rate=float(np.mean([r["top10_min_rotation_deg"] <= 30.0001
@@ -85,6 +94,10 @@ def main():
                         default=(.10, .10, .80, .80))
     parser.add_argument("--include-spatial", action="store_true",
                         help="Also run the prior patch-spatial ablation")
+    parser.add_argument("--include-patch", action="store_true",
+                        help="Also test global Top-10 plus masked spatial reranking")
+    parser.add_argument('--modes', nargs='+', choices=MODES,
+                        help='Run only these object-ROI retrieval modes (DINO uses auto ROI)')
     args = parser.parse_args()
     _, views = load_manifest(args.views)
     query_path = args.query_views or args.views
@@ -101,6 +114,10 @@ def main():
         conditions.extend((("dino-spatial", False, False),
                            ("dino-spatial", True, False),
                            ("dino-spatial", True, True)))
+    if args.include_patch:
+        conditions.append(('dino-patch', True, True))
+    if args.modes:
+        conditions = [(mode, True, mode != 'sift') for mode in args.modes]
     for mode, crop, auto_roi in conditions:
         summary, rows = run(args.views, query_path, indices, mode, crop, args.retrieval_roi,
                             args.device, auto_roi=auto_roi)

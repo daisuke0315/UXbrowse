@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import json
 import math
@@ -15,7 +17,7 @@ import numpy as np  # type: ignore
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_GLB = SCRIPT_DIR.parent / "data" / "260911" / "260108-3.glb"
-DEFAULT_OUTPUT = SCRIPT_DIR / "output_glb_reference_views"
+DEFAULT_OUTPUT = DATA_DIR / "output_glb_reference_views"
 
 
 class GLBRenderError(RuntimeError):

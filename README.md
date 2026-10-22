@@ -46,6 +46,8 @@ CT断面画像（MPR）と可視光3Dモデルを、ブラウザ上で重ねて�
 
 ## ローカル起動
 
+MacARのPythonライブ処理は[MacARの説明](MacAR/README.md)を参照してください。コードは`MacAR/`、ローカル画像・特徴地図・モデル・ログはGit対象外の`data/MacAR/`に分離しています。[データ配置](MacAR/docs/data-layout.md)。以下は独立したブラウザビューアの起動方法です。
+
 Node.jsやビルド処理は不要です。
 
 ```bash

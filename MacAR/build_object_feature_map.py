@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import csv
 import math
@@ -18,11 +20,10 @@ from typing import Dict, Iterator, List, Optional, Sequence, Set, Tuple
 from extract_object_observations import Camera, ObservationError, load_cameras
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "output"
+DEFAULT_OUTPUT_DIR = DATA_DIR / "output"
 DEFAULT_OBSERVATIONS = DEFAULT_OUTPUT_DIR / "object_observations.csv"
-DEFAULT_CAMERAS = SCRIPT_DIR / "colmap" / "Cameras.txt"
-DEFAULT_IMAGE_DIR = SCRIPT_DIR / "image"
+DEFAULT_CAMERAS = DATA_DIR / "colmap" / "Cameras.txt"
+DEFAULT_IMAGE_DIR = DATA_DIR / "image"
 
 REQUIRED_COLUMNS = (
     "image_id",

@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import csv
 import math
@@ -22,9 +24,8 @@ from extract_object_observations import (
 )
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_DATA_DIR = SCRIPT_DIR / "colmap_image"
-DEFAULT_FEATURE_DIR = SCRIPT_DIR / "output_colmap_image"
+DEFAULT_DATA_DIR = DATA_DIR / "colmap_image"
+DEFAULT_FEATURE_DIR = DATA_DIR / "output_colmap_image"
 DEFAULT_OUTPUT_DIR = DEFAULT_FEATURE_DIR / "pnp_test"
 
 RESULT_COLUMNS = (

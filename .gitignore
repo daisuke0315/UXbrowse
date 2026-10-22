@@ -1,5 +1,10 @@
 .DS_Store
+MacAR/output_map_preprocessing/
+MacAR/registered_map_selection.json
 **/.DS_Store
+
+# MacAR local research data (not code).
+/data/MacAR/
 
 # Local medical/model data should not be committed by default.
 # Only the public bundled demo assets are intentionally published.
@@ -22,6 +27,7 @@ data/260911/*
 !data/260911/volume_preprocessed.model-bounds.mha
 
 # Runtime and editor artifacts.
+MacAR/output_runtime_logs/
 node_modules/
 dist/
 build/

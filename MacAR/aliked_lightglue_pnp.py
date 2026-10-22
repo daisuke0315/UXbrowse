@@ -10,6 +10,8 @@ with a per-pixel GLB XYZ buffer without changing the PnP stage.
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import csv
 import json
@@ -36,7 +38,6 @@ from realtime_pnp import approximate_camera_matrix
 from reference_guided_pnp import ReferenceRetriever, load_map
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_DATA_ROOT = Path(
     "/Users/daisuketanii/Library/CloudStorage/GoogleDrive-"
     "mp.daisuketanii@gmail.com/マイドライブ/010_splat/data/260917"
@@ -283,8 +284,8 @@ def solve_pose(
     return Pose(rvec, tvec, indices, float(np.mean(errors[indices])))
 
 
-def _load_models(max_keypoints: int, match_threshold: float, device_name: str):
-    os.environ.setdefault("TORCH_HOME", str(SCRIPT_DIR / ".model_cache" / "torch"))
+def _load_models(max_keypoints: int, match_threshold: float, device_name: str, *, matcher_required=True):
+    os.environ.setdefault("TORCH_HOME", str(DATA_DIR / ".model_cache" / "torch"))
     try:
         import torch
         from lightglue import ALIKED, LightGlue
@@ -311,7 +312,7 @@ def _load_models(max_keypoints: int, match_threshold: float, device_name: str):
         matcher = LightGlue(
             features="aliked",
             filter_threshold=match_threshold,
-        ).eval().to(device)
+        ).eval().to(device) if matcher_required else None
     except Exception as exc:
         raise LearnedMatchingError(
             "Could not initialize ALIKED/LightGlue. The first run needs network "

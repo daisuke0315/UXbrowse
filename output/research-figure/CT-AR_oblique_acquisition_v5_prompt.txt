@@ -1,0 +1,28 @@
+Mode: built-in imagegen, using a coordinate-projected 3-D scaffold.
+Final geometry scaffold: CT-AR_oblique_acquisition_v4.svg
+Angles and distances are schematic, not measured camera extrinsics.
+
+Final prompt:
+Use case: scientific-educational / precise-object-edit.
+Input image 1 is the EDIT TARGET: a mathematically projected 3D scientific schematic. Input image 2 is only a MATERIAL/APPEARANCE reference for the beige STI QC Phantom.
+Polish image 1 into an elegant, publication-ready technical 3D illustration while STRICTLY preserving its correct geometry.
+
+ABSOLUTE INVARIANTS:
+Preserve ALL four camera positions, the orientation and visible front/back side of each phone, cube position, projected edges, inward viewing axes, view numbering and lower four corresponding cube views from image 1.
+View 1 and View 4 phones show their FRONT SCREENS because their rear camera lenses face inward toward the phantom, away from the illustration observer. Do NOT put camera lenses on these visible screens or rotate these phones to show their backs.
+View 2 and View 3 show the rear/edge camera side facing inward. Preserve these poses exactly.
+Every camera is above the cube and aimed diagonally downward at the cube center from a different vertical corner. Every camera view includes the TOP face plus TWO ADJACENT SIDE faces.
+The arrows are sight directions, and their start may emerge from the hidden rear camera side of near phones. Preserve their geometric direction exactly.
+Preserve the different corresponding viewpoints in the four lower cube thumbnails. They are schematic illustrations, not photographs.
+
+Improve only the presentation: soften the harsh flat shading, use a realistic-but-clearly-illustrated beige phantom appearance informed by image 2, rounded manufactured cube edges, subtle construction seams; make the phones clean consistent dark gray 3D technical icons. Add understated depth shading and anti-aliased precise outlines. Do not invent photorealistic measurement markers or new surface features. Keep a pure white background and restrained muted-red arrows. Keep the composition, text placement and whitespace from image 1, with no overlaps. Do not shorten the view geometry or move any objects.
+
+Text, exactly as in image 1:
+"View 1", "View 2", "View 3", "View 4", each with "3 images".
+"STI QC Phantom".
+"Each camera view: top + two adjacent side faces".
+Four thumbnails labeled "View 1" to "View 4".
+"One iPhone 15 Pro RGB camera · 4 viewpoints × 3 images = 12 images".
+
+No large title, no numerical angles or dimensions, no decorative elements, no watermark. The main objective is accurate three-face oblique viewing geometry, with tasteful journal illustration styling.
+

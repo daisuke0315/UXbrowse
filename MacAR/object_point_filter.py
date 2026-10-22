@@ -7,6 +7,8 @@ OpenCV are imported lazily when a QC preview or interactive viewer is requested.
 
 from __future__ import annotations
 
+from macar_paths import DATA_DIR
+
 import argparse
 import hashlib
 import math
@@ -20,9 +22,8 @@ from pathlib import Path
 from typing import List, Optional, Sequence, TextIO, Tuple
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_INPUT = SCRIPT_DIR / "colmap" / "Points3D.txt"
-DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "output"
+DEFAULT_INPUT = DATA_DIR / "colmap" / "Points3D.txt"
+DEFAULT_OUTPUT_DIR = DATA_DIR / "output"
 RC_TO_COLMAP = (
     (1.0, 0.0, 0.0),
     (0.0, 0.0, -1.0),
