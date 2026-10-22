@@ -6,6 +6,7 @@ LightGlue match on the reference side is associated with the nearest existing
 COLMAP object observation, which transfers its POINT3D_ID and XYZ to the query
 keypoint.  The final virtual-view implementation can replace that association
 with a per-pixel GLB XYZ buffer without changing the PnP stage.
+test
 """
 
 from __future__ import annotations
@@ -393,6 +394,7 @@ def _camera_for_query(args, query_bgr, references_by_name):
     camera_id = args.camera_id or (
         query_reference.camera_id if query_reference is not None else None
     )
+
     if camera_id is None:
         return approximate_camera_matrix(width, height, args.fov_deg), None, None
     cameras, parameters = load_camera_parameters(args.cameras)
