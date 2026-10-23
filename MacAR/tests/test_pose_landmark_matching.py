@@ -118,16 +118,35 @@ class RegisteredValidationTests(unittest.TestCase):
         self.assertIs(workspace['pose_prior'][0],r)
         engine.retriever.assert_not_called()
 
-    def test_context_prior_check_does_not_bypass_qc_or_accept_pose_jump(self):
-        engine,_,_,_,r,t,_,_=self.point_engine()
-        quality=dict(passed=False,reasons=['clustered_image_support'])
-        engine._check_search_pose(quality,r,t,(r,t))
-        self.assertFalse(quality['passed'])
-        self.assertEqual(quality['reasons'],['clustered_image_support'])
-        quality=dict(passed=True,reasons=[])
-        engine._check_search_pose(quality,r,t+1000.,(r,t))
-        self.assertFalse(quality['passed'])
-        self.assertIn('pose_prior_mismatch',quality['reasons'])
+    def test_fast_replenishment_does_not_reject_qc_valid_pose_by_prior_difference(self):
+        engine,frame,k,d,r,t,uv,query=self.point_engine()
+        pairs=np.column_stack((np.arange(20),np.arange(20)))
+        prior_rotation=np.array([0.,.4,0.])
+        prior_translation=t+np.array([500.,0.,0.])
+        with patch('registered_aliked_live.crop_live_object',return_value=(frame,(0,0,640,480))), \
+             patch('registered_aliked_live._extract',return_value=query), \
+             patch('registered_aliked_live.match_projected_landmarks',return_value=(pairs,np.ones(20),
+                dict(descriptor_pass=20,mutual_pass=20,neighbourhood_pairs=40))):
+            result,_=engine.localize_guided(frame,k,d,prior_rotation,prior_translation)
+        self.assertEqual(result.status,'PASS')
+        self.assertIsNotNone(engine.last_tracking_seed)
+        delta=engine.last_diagnostics['quality']['pose_comparison']
+        self.assertGreater(delta['rotation_deg'],15.)
+        self.assertGreater(delta['center_distance'],100.)
+        self.assertNotIn('pose_prior_mismatch',result.detail)
+
+    def test_fast_replenishment_still_rejects_ordinary_qc_failure(self):
+        engine,frame,k,d,r,t,uv,query=self.point_engine()
+        pairs=np.column_stack((np.arange(20),np.arange(20)))
+        engine.validate_pose=Mock(return_value=dict(passed=False,reasons=['clustered_image_support']))
+        with patch('registered_aliked_live.crop_live_object',return_value=(frame,(0,0,640,480))), \
+             patch('registered_aliked_live._extract',return_value=query), \
+             patch('registered_aliked_live.match_projected_landmarks',return_value=(pairs,np.ones(20),
+                dict(descriptor_pass=20,mutual_pass=20,neighbourhood_pairs=40))):
+            result,_=engine.localize_guided(frame,k,d,r,t)
+        self.assertEqual(result.status,'FAIL')
+        self.assertIn('clustered_image_support',result.detail)
+        self.assertIsNone(engine.last_tracking_seed)
 
     def point_engine(self):
         import torch

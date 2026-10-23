@@ -93,7 +93,6 @@ def main():
             actor.global_localizer=engine
             actor.tracker=TemporalGlobalPnPLocalizer(engine)
             actor.tracker.seed=TemporalGlobalPnPLocalizer._copy_seed(old)
-            actor.refine_refresh_pose=False
             actor.last_search_diagnostics={'reference_matching':'pose_references' if name=='context' else 'pose_landmarks'}
             added=actor._replenish_current_seed(seeds[name],image,K,dist)
             checked=actor.tracker._track(image,K,dist)

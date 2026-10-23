@@ -166,6 +166,32 @@ class CurrentPoseHandoffTests(unittest.TestCase):
         self.assertIs(loc.tracker.seed,old)
         self.assertIsNotNone(loc.pending_seed)
 
+    def test_small_transported_set_is_not_rejected_before_old_new_common_pnp(self):
+        loc,image,matrix,_,_=self.fixture(qc=False)
+        old=loc.global_localizer.last_tracking_seed
+        loc.tracker.seed=old
+        transported=loc.query_tracks.attach.return_value[0]
+        loc.query_tracks.attach.return_value=(TrackingSeed(transported.gray,
+            transported.image_points[:6],transported.object_points[:6],
+            transported.rvec,transported.tvec),dict(reason='transported'))
+        with patch('glb_virtual_live.time.monotonic',return_value=21.):
+            loc._consume_completed(image,matrix,None)
+        self.assertIs(loc.tracker.seed,old)
+        self.assertIsNotNone(loc.pending_seed)
+        self.assertEqual(len(loc.pending_seed.image_points),6)
+        loc.global_localizer.validate_pose.assert_not_called()
+
+    def test_pending_common_pool_still_requires_actual_latest_image(self):
+        loc,image,matrix,_,_=self.fixture()
+        old=loc.global_localizer.last_tracking_seed
+        loc.tracker.seed=old
+        image[:]=100
+        with patch('glb_virtual_live.time.monotonic',return_value=21.):
+            loc._consume_completed(image,matrix,None)
+        self.assertIs(loc.tracker.seed,old)
+        self.assertIsNone(getattr(loc,'pending_seed',None))
+        self.assertEqual(loc.last_search_diagnostics['seed_transport']['reason'],'latest_frame_not_reached')
+
     def test_worker_finishing_between_foreground_update_and_consume_keeps_snapshot(self):
         loc,image,matrix,rv,tv=self.fixture()
         source=loc.global_localizer.last_tracking_seed

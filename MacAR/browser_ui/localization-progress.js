@@ -51,7 +51,7 @@ export function backgroundSummary(search){
     const states={running:search.mode==='global'?'全体探索中':'近傍補充中',cooldown:'負荷調整・待機',foreground_busy:'追跡優先で休止',ready:'検索準備',waiting:'初期位置合わせ待ち'};
     states.image_wait='鮮明な対象画像待ち';
     states.viewpoint_wait='視点変化待ち';
-    const outcomes={not_started:'未実行',added:'新規点を統合',verified:'既存点の一致を再確認',search_or_transport_rejected:'探索／転送を拒否',current_frame_qc_rejected:'現在画像のQCで拒否'};
+    const outcomes={not_started:'未実行',added:'新規点を統合',reinitialized:'追跡を再初期化',verified:'既存点の一致を再確認',search_or_transport_rejected:'探索／転送を拒否',current_frame_qc_rejected:'現在画像のQCで拒否'};
     const reasons={initial:'初期位置合わせ',viewpoint_unchanged:'同じ視点・点支持を維持',safety_review:'定期安全確認',near_search_failed:'近傍検索失敗＋追跡悪化',tracking_lost:'追跡ロスト',few_points:'点数不足',image_coverage:'画像内の分布不足',view_direction_changed:'物体を見る方向の変化',new_regions_visible:'新しく映る領域の増加',residual_rising:'再投影誤差増加', '3d_support':'3D点の広がり不足'};
     reasons.pose_jump='大きな姿勢変化';
     reasons.points_declining='点が減少・先行補充';reasons.view_direction_approaching='見る方向の変化へ先行補充';
@@ -63,6 +63,7 @@ export function backgroundSummary(search){
     const handoff=h?.points!=null?` | 面の引継ぎ: 追跡${h.points}点 / 減少傾向からの予測${Number(h.forecast_points).toFixed(0)}点 · 回転${Number(h.rotation_speed_deg_s).toFixed(1)}°/s · 候補先読み${Number(h.lookahead_deg).toFixed(1)}°`:'';
     const recovery=search.recovery;
     const gap=recovery?.recovered!=null?` | 短いロストからの復帰 ${recovery.recovered}回${!search.tracking&&recovery.state==='recovering'?' · 最新画像で再追跡中':''}`:'';
-    const correction=search.refinement?.conflict?' | 追跡と新規照合の姿勢が不一致・重畳を停止して全体再探索':search.refinement?.committed?` | 前回の補充で姿勢修正 ${Number(search.refinement.rotation_deg).toFixed(1)}°`:'';
+    const selected={old:'旧姿勢',fresh:'新点PnP',joint:'統合PnP'};
+    const correction=search.refinement?.committed?` | 新旧共通の点で姿勢更新 ${search.refinement.old_points}→${search.refinement.new_points}点 · 採用 ${selected[search.refinement.selected]||search.refinement.selected}${search.refinement.reinitialized?' · 追跡を再初期化':''}`:'';
     return `裏側更新: ${states[b.state]||b.state} · ${reason} | 前回 ${outcomes[b.outcome]||b.outcome} +${b.last_added}点 / 累計追加${b.added_total}点 · 連続拒否${b.failures} | 追跡 ${Number(b.tracking_ms).toFixed(1)} ms · 前回探索 ${Number(b.search_ms).toFixed(0)} ms${handoff}${gap}${correction}`;
 }

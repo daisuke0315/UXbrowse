@@ -13,7 +13,6 @@ from realtime_pnp_server import TrackingSeed, TemporalGlobalPnPLocalizer
 from glb_virtual_live import AsyncTemporalGLBLocalizer
 from background_refresh import BackgroundRefresh
 from pose_quality import assess_pose
-from replenishment_refinement import refine_pose
 
 
 class RecoveryTests(unittest.TestCase):
@@ -85,68 +84,6 @@ class RecoveryTests(unittest.TestCase):
         self.assertIsNone(params['pose_prior'])
         self.assertFalse(params['optimize_guided'])
         self.assertEqual(params['ranked_override'],[(1.,0.,3),(1.,0.,4),(1.,0.,5)])
-
-
-class ReplenishmentPoseTests(unittest.TestCase):
-    def fixture(self):
-        cv2.setRNGSeed(11)
-        rng=np.random.default_rng(7)
-        xyz=rng.uniform([-80,-50,400],[80,50,600],(64,3))
-        K=np.array([[500.,0,320],[0,500.,240],[0,0,1]])
-        uv=cv2.projectPoints(xyz,np.zeros(3),np.zeros(3),K,None)[0].reshape(-1,2)
-        model=SimpleNamespace(min_inliers=10,ransac_threshold=8.)
-        model.validate_pose=lambda xyz,uv,r,t,ids,shape,k,d:assess_pose(
-            xyz,uv,r,t,ids,shape,k,d,10,.2,6.,max_p95_error=9.)
-        return xyz,uv,K,model
-
-    def test_fresh_pose_corrects_small_drift_when_both_observation_sets_agree(self):
-        xyz,uv,K,model=self.fixture()
-        old=SimpleNamespace(rvec=np.array([0.,.01,0.]),tvec=np.zeros(3),object_points=xyz,image_points=uv)
-        corrected,info=refine_pose(old,uv,xyz,(480,640,3),K,None,model)
-        self.assertTrue(info['accepted'])
-        self.assertLess(np.linalg.norm(corrected.rvec),.001)
-        self.assertLess(info['cost_after'],info['cost_before']*.1)
-        np.testing.assert_array_equal(old.rvec,[0.,.01,0.])
-
-    def test_fresh_pose_cannot_override_disagreeing_existing_points(self):
-        xyz,uv,K,model=self.fixture()
-        oldpose=np.array([0.,.04,0.])
-        olduv=cv2.projectPoints(xyz,oldpose,np.zeros(3),K,None)[0].reshape(-1,2)
-        old=SimpleNamespace(rvec=oldpose,tvec=np.zeros(3),object_points=xyz,image_points=olduv)
-        corrected,info=refine_pose(old,uv,xyz,(480,640,3),K,None,model)
-        self.assertIs(corrected,old)
-        self.assertFalse(info['accepted'])
-        self.assertEqual(info['reason'],'old_points_disagree')
-        self.assertTrue(info['conflict'])
-
-    def test_only_strong_contradicting_fresh_pose_invalidates_tracking(self):
-        xyz,uv,K,model=self.fixture()
-        oldpose=np.array([0.,.4,0.])
-        olduv=cv2.projectPoints(xyz,oldpose,np.zeros(3),K,None)[0].reshape(-1,2)
-        old=SimpleNamespace(rvec=oldpose,tvec=np.zeros(3),object_points=xyz,image_points=olduv)
-        for count, conflict in ((20,False),(64,True)):
-            corrected,info=refine_pose(old,uv[:count],xyz[:count],(480,640,3),K,None,model)
-            self.assertIs(corrected,old)
-            self.assertEqual(info.get('conflict',False),conflict)
-
-    def test_no_correction_without_measurable_improvement_or_enough_new_points(self):
-        xyz,uv,K,model=self.fixture()
-        old=SimpleNamespace(rvec=np.zeros(3),tvec=np.zeros(3),object_points=xyz,image_points=uv)
-        for count in (10,64):
-            corrected,info=refine_pose(old,uv[:count],xyz[:count],(480,640,3),K,None,model)
-            self.assertIs(corrected,old)
-            self.assertFalse(info['accepted'])
-
-    def test_weak_old_track_can_reinitialize_from_strong_spread_fresh_matches(self):
-        xyz,uv,K,model=self.fixture()
-        oldpose=np.array([0.,.04,0.])
-        olduv=cv2.projectPoints(xyz[:16],oldpose,np.zeros(3),K,None)[0].reshape(-1,2)
-        old=SimpleNamespace(rvec=oldpose,tvec=np.zeros(3),object_points=xyz[:16],image_points=olduv)
-        corrected,info=refine_pose(old,uv,xyz,(480,640,3),K,None,model)
-        self.assertTrue(info['accepted'])
-        self.assertEqual(info['reason'],'strong_fresh_reseed')
-        self.assertGreaterEqual(len(corrected.image_points),40)
-        self.assertLess(np.linalg.norm(corrected.rvec),.001)
 
 
 if __name__=='__main__':unittest.main()

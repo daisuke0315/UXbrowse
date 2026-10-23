@@ -78,7 +78,8 @@ class DynamicCoverageTests(unittest.TestCase):
     def test_spread_3d_points_still_replenish_when_image_support_is_small(self):
         localizer, image = self.fixture([[0, 0, 0], [50, 0, 0], [0, 50, 0]])
         localizer.global_localizer.last_tracking_quality = {'coverage': .01}
-        localizer.localize(image, np.eye(3), None)
+        with patch('glb_virtual_live.time.monotonic', return_value=2.):
+            localizer.localize(image, np.eye(3), None)
         localizer._submit.assert_called_once()
         self.assertIn('image_coverage', localizer.last_replenish_reasons)
 
@@ -86,7 +87,8 @@ class DynamicCoverageTests(unittest.TestCase):
         localizer, image = self.fixture([[0, 0, 0], [50, 0, 0], [0, 50, 0]])
         localizer.global_localizer.manifest=dict(center=(0.,0.,500.))
         localizer.replenish_anchor = SimpleNamespace(rvec=np.zeros(3), tvec=np.array([200.,0.,0.]))
-        localizer.localize(image, np.eye(3), None)
+        with patch('glb_virtual_live.time.monotonic', return_value=2.):
+            localizer.localize(image, np.eye(3), None)
         localizer._submit.assert_called_once()
         self.assertIn('view_direction_changed', localizer.last_replenish_reasons)
 
@@ -434,9 +436,10 @@ class PoseGuidedReplenishmentTests(unittest.TestCase):
                                  np.zeros(3), np.zeros(3))
         localizer = AsyncTemporalGLBLocalizer.__new__(AsyncTemporalGLBLocalizer)
         localizer.tracker = SimpleNamespace(seed=current, flow_window=31,
-            flow_levels=3, forward_backward_error=1.5)
+            flow_levels=3, forward_backward_error=1.5,tracking_iterations=150)
         localizer.global_localizer = SimpleNamespace(ransac_threshold=8.,
-            validate_pose=lambda *args: {'passed': True})
+            validate_pose=lambda xyz,uv,r,t,ids,shape,k,d:
+                assess_pose(xyz,uv,r,t,ids,shape,k,d,4,.2,3.,max_p95_error=4.5))
 
         def unchanged_flow(_before, _after, points, _unused, **_kwargs):
             return points.copy(), np.ones((len(points), 1), np.uint8), None
@@ -446,7 +449,8 @@ class PoseGuidedReplenishmentTests(unittest.TestCase):
             added = localizer._replenish_current_seed(candidate, image, matrix, None)
         self.assertEqual(added, 4)
         self.assertEqual(len(localizer.tracker.seed.image_points), 8)
-        np.testing.assert_allclose(localizer.tracker.seed.image_points[4:], new_uv)
+        self.assertEqual(set(map(tuple,localizer.tracker.seed.image_points)),
+                         set(map(tuple,np.vstack((old_uv,new_uv)))))
 
     def test_verified_duplicate_points_refresh_angle_anchor_without_new_points(self):
         image = np.zeros((100, 100, 3), np.uint8)
@@ -456,7 +460,7 @@ class PoseGuidedReplenishmentTests(unittest.TestCase):
         seed = TrackingSeed(image[:, :, 0], uv, xyz, np.zeros(3), np.zeros(3))
         localizer = AsyncTemporalGLBLocalizer.__new__(AsyncTemporalGLBLocalizer)
         localizer.tracker = SimpleNamespace(seed=seed, flow_window=31,
-            flow_levels=3, forward_backward_error=1.5)
+            flow_levels=3, forward_backward_error=1.5,tracking_iterations=150)
         def unchanged(_before, _after, points, _unused, **kwargs):
             return points.copy(), np.ones((len(points), 1), np.uint8), None
         for accepted in (False, True):
@@ -471,7 +475,10 @@ class PoseGuidedReplenishmentTests(unittest.TestCase):
                     np.testing.assert_allclose(localizer.replenish_anchor.rvec, seed.rvec)
                 else:
                     self.assertIs(localizer.replenish_anchor, anchor)
-                self.assertIs(localizer.tracker.seed, seed)
+                if not accepted:
+                    self.assertIs(localizer.tracker.seed, seed)
+                else:
+                    self.assertEqual(len(localizer.tracker.seed.image_points),len(seed.image_points))
 
 
 class AppearanceAuditTests(unittest.TestCase):

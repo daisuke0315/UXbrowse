@@ -25,6 +25,8 @@
 
 ## 対象外
 
+以下はブラウザビューア本体の範囲です。別アプリとして開発する[ViewSync Builder](../ViewSyncBuilder/README.md)では、未知姿勢SfM・CT-GCP拘束BAとCPU MVSによるDense・メッシュ・写真テクスチャ生成を扱います。Builderの進捗・制約はその資料を参照してください。
+
 - CTと3Dモデルの位置合わせ処理
 - 外観モデルの生成やGaussian Splattingの直接表示
 - PACS、DICOMweb、患者情報、権限、監査ログの管理

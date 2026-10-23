@@ -7,20 +7,13 @@ from unittest.mock import Mock
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from guided_matching import spatial_indices, subset_features, project_candidates, pair_gate, region_counts, replenishment_indices
+from guided_matching import spatial_indices, subset_features, project_candidates, pair_gate, region_counts
 from glb_virtual_live import GLBVirtualLiveLocalizer
 from glb_virtual_view_pnp import VirtualTransfer
 from realtime_pnp_server import LiveResult
 
 
 class GuidedMatchingTests(unittest.TestCase):
-    def test_replenishment_fills_untracked_regions_before_dense_existing_cluster(self):
-        candidates=np.array([[10.,10.]]*30+[[90.,90.],[91.,91.],[92.,92.]])
-        existing=np.array([[10.,10.]]*70)
-        selected=replenishment_indices(candidates,-np.arange(33),existing)
-        self.assertEqual(set(selected[:3]),{30,31,32})
-        self.assertEqual(sorted(selected.tolist()),list(range(33)))
-        self.assertEqual(len(replenishment_indices(np.empty((0,2)),[],existing)),0)
     def test_region_counts_identify_lower_right_without_saving_pixels(self):
         counts=region_counts([[1,1],[99,99],[98,98],[100,50],[float('nan'),2]],(0,0,100,100))
         self.assertEqual(len(counts),16)
@@ -44,13 +37,6 @@ class GuidedMatchingTests(unittest.TestCase):
     def test_empty_and_under_budget_do_not_change_indices(self):
         self.assertEqual(len(spatial_indices(np.empty((0, 2)), None, 32)), 0)
         np.testing.assert_array_equal(spatial_indices([[1, 2], [3, 4]], None, 32), [0, 1])
-
-    def test_addition_priority_spreads_candidates_without_existing_points(self):
-        points=np.vstack((np.zeros((30,2)),[[100,100],[0,100],[100,0]]))
-        selected=replenishment_indices(points,np.arange(len(points))[::-1],np.empty((0,2)))
-        self.assertTrue(set([30,31,32]) <= set(selected[:4]))
-        self.assertEqual(set(selected),set(range(len(points))))
-        self.assertEqual(len(replenishment_indices([],[],np.empty((0,2)))),0)
 
     def test_projection_rejects_invalid_behind_camera_and_outside_crop(self):
         matrix = np.array([[100., 0, 50], [0, 100, 50], [0, 0, 1]])

@@ -17,6 +17,7 @@ class BackgroundRefresh:
     tracking_ms: float = 0.
     failures: int = 0
     added_total: int = 0
+    reinitializations: int = 0
     last_added: int = 0
     outcome: str = 'not_started'
     reason: str = 'initial'
@@ -38,11 +39,12 @@ class BackgroundRefresh:
         self.search_ms = max(0., milliseconds)
         self.state = 'cooldown'
 
-    def accepted(self, added=0):
+    def accepted(self, added=0, *, replaced=False):
         self.failures = 0
         self.last_added = added
         self.added_total += added
-        self.outcome = 'added' if added else 'verified'
+        self.reinitializations += int(replaced)
+        self.outcome = 'reinitialized' if replaced else 'added' if added else 'verified'
 
     def rejected(self, reason):
         self.failures += 1
@@ -91,4 +93,5 @@ class BackgroundRefresh:
         return dict(state=self.state, reason=self.reason, outcome=self.outcome,
                     tracking_ms=self.tracking_ms, search_ms=self.search_ms,
                     failures=self.failures, last_added=self.last_added,
-                    added_total=self.added_total, duty_target=self.duty)
+                    added_total=self.added_total, reinitializations=self.reinitializations,
+                    duty_target=self.duty)

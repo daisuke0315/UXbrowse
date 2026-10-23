@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ViewSync Builder</title><link rel="stylesheet" href="/style.css">
+  <script type="importmap">{"imports":{"three":"/vendor/three/three.module.js"}}</script>
+</head>
+<body>
+  <aside>
+    <a class="brand" href="/">ViewSync<span>BUILDER</span></a>
+    <p class="sidebar-label">CT-GCP PHOTOGRAMMETRY</p>
+    <nav aria-label="作業工程">
+      <button data-page="project" class="active"><span>01</span>プロジェクト</button>
+      <button data-page="input"><span>02</span>写真・CT</button>
+      <button data-page="control"><span>03</span>GCP設定</button>
+      <button data-page="build"><span>04</span>モデル生成</button>
+      <button data-page="result"><span>05</span>結果確認</button>
+    </nav>
+    <div class="local-note"><i></i> 完全ローカル処理<br><small>患者データを送信する機能はありません。</small></div>
+    <div class="sidebar-footer">RESEARCH EDITION · 0.3<br><span>精度・配布検証は開発中です。</span></div>
+  </aside>
+  <main>
+    <header><div><span id="project-name">プロジェクト未選択</span><span class="pill">研究・技術検証用</span></div><span id="engine-state">エンジン確認中…</span></header>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <section id="page-project" class="page">
+      <div class="eyebrow">01 / WORKSPACE</div><h1>写真から、CT座標へ。</h1><p class="lead">CTの既知点を拘束に使い、外観のSparseモデルを再構成します。</p>
+      <div class="grid two">
+        <article><h2>プロジェクトを作成・再開</h2><label>プロジェクト名<input id="new-name" placeholder="例：Phantom study 01"></label><label>保存先フォルダ（絶対パス）<input id="project-path" placeholder="/Users/…/Projects/Study01"></label><div class="actions"><button id="create-project" class="primary">新規作成</button><button id="open-project">既存を開く</button></div><p class="hint">新規作成では空の新しいフォルダを指定します。写真の原本と計算結果は分離して保存します。</p></article>
+        <article><h2>最近のプロジェクト</h2><div id="recent-projects" class="list empty">まだありません</div><div class="divider"></div><h3>進め方</h3><ol class="guide"><li>写真を読み込み、SfMまで実行</li><li>CT上と複数写真上で同じGCPを指定</li><li>拘束BAと独立評価を実行・保存</li></ol></article>
+      </div>
+      <article class="wide"><h2>実行環境</h2><div id="capabilities" class="hint">確認中</div></article>
+    </section>
+    <section id="page-input" class="page" hidden>
+      <div class="eyebrow">02 / SOURCE DATA</div><h1>写真とCTを読み込む</h1><p class="lead">写真上の座標はEXIF回転を適用した画像を基準にします。</p>
+      <div class="grid two"><article><h2>撮影画像 <span id="image-count" class="count">0</span></h2><label class="upload">JPEG / PNGを選択<input id="photo-files" type="file" accept="image/jpeg,image/png" multiple></label><div id="photo-grid" class="photo-grid"></div></article>
+      <article><h2>DICOM CTシリーズ</h2><label>CTフォルダ（絶対パス）<input id="ct-folder" placeholder="/Users/…/DICOM"></label><button id="scan-ct">シリーズを検索</button><label>シリーズ<select id="ct-series"><option value="">未選択</option></select></label><button id="load-ct" class="primary">選択したCTを取り込む</button><p id="ct-summary" class="hint">内部のスライス欠損は検出してHU線形補間します。元DICOMを保持し、補間位置を記録します。重複・座標不整合・基本間隔を特定できない場合はエラーになります。</p><div id="ct-interpolation" class="hint"></div></article></div>
+    </section>
+    <section id="page-control" class="page" hidden>
+      <div class="eyebrow">03 / CONTROL & CHECK POINTS</div><h1>CTと写真の同じ点を指定</h1><p class="lead">拘束点は4点以上を推奨。評価点は位置合わせ・BAに使いません。</p>
+      <article class="point-bar"><label>選択中の点<select id="point-select"><option value="">点を追加してください</option></select></label><button id="add-point" class="primary">＋ 点を追加</button><button id="delete-point">選択点を削除</button><span id="point-summary" class="hint"></span></article>
+      <div class="grid two viewers"><article><div class="viewer-title"><h2>CT / 患者LPS</h2><select id="mpr-plane"><option value="axial">Axial</option><option value="coronal">Coronal</option><option value="sagittal">Sagittal</option></select></div><label>断面位置 <span id="mpr-position-label"></span><input id="mpr-position" type="range" min="0" max="100" value="50" step=".1"></label><div class="window-controls"><label>WL<input id="mpr-level" type="number" value="40"></label><label>WW<input id="mpr-width" type="number" value="400" min="1"></label></div><canvas id="mpr-canvas" width="512" height="512" aria-label="CT断面。クリックして選択点のCT座標を設定"></canvas><p id="mpr-quality" class="hint"></p><p class="hint">断面をクリックして選択中の点のCT座標を設定します。</p></article>
+      <article><div class="viewer-title"><h2>写真上の観測点</h2><select id="photo-select"><option value="">写真を選択</option></select></div><div class="actions small"><label>拡大 <input id="photo-zoom" type="range" min="100" max="400" value="100" step="25"></label><button id="roi-mode">ROIを描く</button><button id="roi-apply" hidden>ROIを確定</button><button id="roi-clear">ROI解除</button></div><div class="photo-viewport"><canvas id="photo-canvas" width="512" height="512" aria-label="写真。クリックして選択点のUV観測を設定"></canvas></div><p id="photo-info" class="hint">写真をクリックして選択中の点のUVを設定します。</p><div id="observations"></div></article></div>
+      <article class="wide"><h2>点の座標と役割</h2><div class="table-wrap"><table><thead><tr><th>使用</th><th>点ID</th><th>役割</th><th>X / 左 mm</th><th>Y / 後 mm</th><th>Z / 頭 mm</th><th>観測数</th><th>CT参照</th></tr></thead><tbody id="point-table"></tbody></table></div><p class="hint">座標の初期値0は仮入力です。CTで指定するか、既知のLPS/mm値に変更してください。補間影響ありの拘束GCP・評価点を使う結果のCT精度は未検証です。</p></article>
+    </section>
+    <section id="page-build" class="page" hidden>
+      <div class="eyebrow">04 / RECONSTRUCTION</div><h1>モデルを生成する</h1><p class="lead">特徴抽出・照合の完了キャッシュを再利用し、工程別の実行にも対応します。</p>
+      <div class="grid two"><article><h2>再構成条件</h2><label>座標と用途<select id="coordinate-mode"><option value="ct">CT拘束：GCP BA後に生成</option><option value="sfm_preview">写真だけの形状試作：任意座標・精度未検証</option></select></label><label>生成物<select id="surface-mode"><option value="texture">Dense・メッシュ・テクスチャまで</option><option value="sparse">Sparseのみ</option></select></label><div class="grid two compact"><label>MVS画像の長辺 px<input id="surface-max-size" type="number" value="1600" min="320" max="4000"></label><label>Dense画像縮小<select id="dense-resolution-level"><option value="1">1段階（標準）</option><option value="0">縮小なし</option><option value="2">2段階（軽量）</option><option value="3">3段階</option></select></label><label>目標面数（0＝簡略化なし）<input id="mesh-faces" type="number" value="0" min="0" max="2000000"></label><label>テクスチャの最大辺 px<input id="texture-size" type="number" value="4096" min="512" max="8192"></label></div><div class="grid two compact"><label>ALIKED<select id="aliked-model"><option value="n16rot">N16ROT</option><option value="n32">N32</option></select></label><label>特徴点上限<input id="max-features" type="number" value="2048" min="128" max="10000"></label><label>解析画像の長辺 px<input id="max-image-size" type="number" value="1600" min="256" max="6000"></label><label>照合ペア<select id="pairing"><option value="sequential">撮影順の近傍</option><option value="exhaustive">全ペア（少数画像向け）</option></select></label><label>近傍数<input id="overlap" type="number" value="10" min="1" max="100"></label><label>内部パラメータ<select id="camera-model"><option>SIMPLE_RADIAL</option><option>PINHOLE</option><option>OPENCV</option></select></label></div><label class="check"><input id="single-camera" type="checkbox">同じカメラ内部パラメータを共有（同一解像度が必要）</label><label>既知内部パラメータ（任意、COLMAPモデル順）<input id="camera-params" placeholder="未指定の場合はSfMで初期推定"></label><label class="check"><input id="refine-intrinsics" type="checkbox">CT拘束BAで内部パラメータも最適化</label><label>GCP観測の再投影上限 px<input id="gcp-max-error" type="number" value="4" min=".1" max="100" step=".1"></label><label>実行する範囲<select id="stop-after"><option value="export">選択した生成物の出力まで</option><option value="sfm">初期SfMまで（GCP不要）</option><option value="features">ALIKED抽出まで</option><option value="matches">照合・幾何検証まで</option><option value="alignment">CT初期整合まで</option><option value="ba">CT拘束BA・QCまで</option><option value="dense">Denseまで</option><option value="mesh">メッシュまで</option><option value="texture">テクスチャまで</option></select></label><div class="actions"><button id="start-job" class="primary">生成を開始</button><button id="cancel-job" disabled>中断</button></div></article>
+      <article><h2>処理状況</h2><div id="job-status" class="status-panel"><span class="status-dot"></span>実行待ち</div><ol class="stages" id="stages"><li data-stage="features">ALIKED特徴抽出</li><li data-stage="matches">LightGlue・幾何検証</li><li data-stage="sfm">初期SfM</li><li data-stage="alignment">CT-GCP初期整合</li><li data-stage="ba">GCP拘束BA・QC</li><li data-stage="dense">歪み補正・CPU Dense生成</li><li data-stage="mesh">メッシュ生成</li><li data-stage="texture">UV・写真テクスチャ生成</li><li data-stage="export">成果物出力</li></ol><div id="job-metrics" class="hint"></div><div class="divider"></div><p class="hint">CPUでDense・メッシュ・テクスチャを生成します。CT拘束はGCPが必要です。写真だけの試作は任意座標で、CT精度は未検証です。</p></article></div>
+      <article class="wide"><h2>実行履歴・再実行</h2><select id="job-select"><option value="">実行履歴なし</option></select><button id="reuse-settings">選択した実行条件を再利用</button><details><summary>処理ログ</summary><pre id="job-log">ログはここに表示されます。</pre></details></article>
+    </section>
+    <section id="page-result" class="page" hidden>
+      <div class="eyebrow">05 / RESULTS</div><h1>生成結果を確認</h1><div class="actions"><select id="result-select"><option value="">実行を選択</option></select><button id="load-result" class="primary">結果を表示</button><label>表示<select id="result-layer"><option value="sparse">Sparse</option></select></label><a id="download" class="button" hidden>成果物ZIPを保存</a><label class="check"><input id="show-cameras" type="checkbox" checked>カメラ</label><label class="check"><input id="show-points" type="checkbox" checked>GCP・評価点</label></div>
+      <div class="result-grid"><article class="preview-card"><div id="preview"></div><div id="coordinate-label" class="preview-caption">モデル未選択</div></article><article><h2>品質評価</h2><div id="qc-status" class="status-panel">未評価</div><div id="qc-metrics"></div><p class="hint">TREは独立評価点の3D位置誤差です。再投影誤差・表示重畳誤差とは異なります。暫定目標内の単一結果で性能を保証しません。</p></article></div>
+      <article class="wide"><h2>評価点ごとの誤差</h2><div id="qc-points" class="table-wrap"></div></article>
+    </section>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body></html>

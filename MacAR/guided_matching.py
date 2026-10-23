@@ -3,7 +3,6 @@
 These filters never initialize a pose or certify CT alignment. Coordinates
 remain in the original full-image pixels even when ALIKED runs on a crop.
 """
-import heapq
 import cv2
 import numpy as np
 
@@ -17,31 +16,6 @@ def region_counts(points, bbox, grid=4):
     scaled = (points[keep]-[x0,y0])/np.maximum([x1-x0,y1-y0],1.)
     cells = np.minimum((scaled*grid).astype(int),grid-1)
     return np.bincount(cells[:,1]*grid+cells[:,0],minlength=grid*grid).tolist()
-
-
-def replenishment_indices(points, scores, existing, grid=8):
-    """Water-fill sparse cells, accounting for points already being tracked."""
-    points = np.asarray(points, np.float64).reshape(-1,2)
-    existing = np.asarray(existing, np.float64).reshape(-1,2)
-    if not len(points):
-        return np.empty(0,np.int64)
-    all_points = np.vstack((points,existing))
-    low = all_points.min(axis=0)
-    span = np.maximum(np.ptp(all_points,axis=0),1.)
-    cells = np.minimum(((all_points-low)/span*grid).astype(int),grid-1)
-    cell_ids = cells[:,1]*grid+cells[:,0]
-    counts = np.bincount(cell_ids[len(points):],minlength=grid*grid)
-    ordered = np.argsort(-np.asarray(scores),kind='stable')
-    buckets = {int(key):ordered[cell_ids[ordered]==key] for key in np.unique(cell_ids[:len(points)])}
-    heap = [(int(counts[key]),key,0) for key in buckets]
-    heapq.heapify(heap)
-    selected = []
-    while heap:
-        count,key,offset = heapq.heappop(heap)
-        selected.append(int(buckets[key][offset]))
-        if offset+1 < len(buckets[key]):
-            heapq.heappush(heap,(count+1,key,offset+1))
-    return np.asarray(selected,np.int64)
 
 
 def spatial_indices(points, scores, budget, grid=8):

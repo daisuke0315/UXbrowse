@@ -454,19 +454,16 @@ class RegisteredALIKEDLiveLocalizer:
                        inliers=result.inliers, total_ms=result.processing_ms)
         return result, canvas
 
-    def _check_search_pose(self, quality, rvec, tvec, prior):
+    def _record_search_pose(self, quality, rvec, tvec, prior):
+        """Record search-frame pose differences without changing correspondence QC."""
         rotation = cv2.Rodrigues(np.asarray(rvec, np.float64))[0]
         previous = cv2.Rodrigues(np.asarray(prior[0], np.float64))[0]
         angle = rotation_angle(rotation, previous)
         center = -rotation.T @ np.asarray(tvec).reshape(3)
         prior_center = -previous.T @ np.asarray(prior[1]).reshape(3)
         distance = float(np.linalg.norm(center-prior_center))
-        maximum = .2*float(np.linalg.norm(np.ptp(self.map_data.xyz, axis=0)))
-        if angle > 15. or distance > maximum:
-            quality['passed'] = False
-            quality['reasons'].append('pose_prior_mismatch')
         quality['pose_comparison'] = dict(reference='search_frame_pose', rotation_deg=angle,
-            max_rotation_deg=15., center_distance=distance, max_center_distance=maximum)
+            center_distance=distance)
 
     def _localize_landmarks(self, image, camera_matrix, distortion, rvec, tvec,
                             *, excluded_polygon=None):
@@ -561,7 +558,7 @@ class RegisteredALIKEDLiveLocalizer:
                                      image.shape, camera_matrix, distortion)
         rotation = cv2.Rodrigues(pose.rvec)[0]
         center = -rotation.T @ pose.tvec.reshape(3)
-        self._check_search_pose(quality, pose.rvec, pose.tvec, (rvec,tvec))
+        self._record_search_pose(quality, pose.rvec, pose.tvec, (rvec,tvec))
         accepted = quality['passed']
         self.last_debug = LocalizationDebug(xyz, frozenset(map(int, pose.inlier_indices)),
             tuple(float(v) for v in center), True, uv)
@@ -846,7 +843,9 @@ class RegisteredALIKEDLiveLocalizer:
                 if context:
                     # The continuous search-image pose is the comparison, not
                     # the arbitrary nearest discrete virtual view's orientation.
-                    self._check_search_pose(quality, pose.rvec, pose.tvec, workspace['pose_prior'])
+                    # The old pose can drift. Defer the choice to current-frame
+                    # common-pool arbitration, without weakening source QC.
+                    self._record_search_pose(quality, pose.rvec, pose.tvec, workspace['pose_prior'])
                     pose_angle = quality['pose_comparison']['rotation_deg']
                 else:
                     if pose_angle > self.max_coarse_rotation_deg:

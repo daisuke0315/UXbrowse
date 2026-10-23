@@ -248,9 +248,9 @@ class AsyncTemporalGLBLocalizer:
         self.short_recovery = (ShortTrackRecovery() if self.search_frame_buffer is not None
                                and replenish_mode == 'background' and orbit_recovery else None)
         self.background_refresh.fast_recovery = self.short_recovery is not None
-        self.refine_refresh_pose = self.short_recovery is not None
         self.resilient_transport = self.short_recovery is not None
         self.last_refresh_refinement = {}
+        self.last_refresh_pool = None
 
     def record_capture(self, image, matrix, distortion, stamp, frame_id=None):
         buffer = getattr(self, 'search_frame_buffer', None)
@@ -460,8 +460,19 @@ class AsyncTemporalGLBLocalizer:
             seed, detail = tracks.attach(seed)
             self.last_search_diagnostics['seed_transport'] = detail
             if seed is not None:
-                seed = self._validate_current_query_seed(seed, image, camera_matrix, distortion, detail)
-                verified_current = seed is not None
+                if self.tracker.seed is not None:
+                    # Existing+fresh points will be solved together. A small
+                    # transported set must not fail a fresh-only pose gate.
+                    if image is None or not np.array_equal(seed.gray,
+                            cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)):
+                        seed = None
+                        detail['reason'] = 'latest_frame_not_reached'
+                    else:
+                        detail['reason'] = 'current_pool_pending'
+                        verified_current = True  # Current-frame timestamp, not pose acceptance.
+                else:
+                    seed = self._validate_current_query_seed(seed, image, camera_matrix, distortion, detail)
+                    verified_current = seed is not None
             if seed is None:
                 self.last_search_diagnostics['seed_rejected'] = 'continuous_transport_failed'
                 self.last_search_diagnostics['seed_rejection_detail'] = detail['reason']
@@ -608,9 +619,10 @@ class AsyncTemporalGLBLocalizer:
                             xyz, seed.rvec.copy(), seed.tvec.copy())
 
     def _replenish_current_seed(self, candidate, image, camera_matrix, distortion):
-        """Flow a verified search seed forward and add independently checked points."""
+        """Flow new observations to the current frame and arbitrate on a shared pool."""
         self.last_refresh_verified = False
         self.last_refresh_refinement = {}
+        self.last_refresh_pool = None
         detail = self.last_replenish_diagnostics = dict(reason='not_checked',
             source_points=len(candidate.image_points), added=0)
         current = self.tracker.seed
@@ -645,111 +657,30 @@ class AsyncTemporalGLBLocalizer:
             & (points[:,0] >= 0) & (points[:,0] < gray.shape[1])
             & (points[:,1] >= 0) & (points[:,1] < gray.shape[0]))
         detail['flow_valid'] = int(flow_valid.sum())
-        context_refresh = getattr(self, 'last_search_diagnostics', {}).get('reference_matching') == 'pose_references'
-        if getattr(self, 'refine_refresh_pose', False) or context_refresh:
-            from replenishment_refinement import refine_pose
-            current, self.last_refresh_refinement = refine_pose(current,
-                points[flow_valid], xyz[flow_valid], image.shape, camera_matrix,
-                distortion, self.global_localizer)
-            self.last_refresh_refinement['committed'] = False
-            if self.last_refresh_refinement.get('conflict'):
-                detail['reason'] = 'fresh_pose_conflict'
-                return 0
-        projected = cv2.projectPoints(xyz, current.rvec, current.tvec,
-                                      camera_matrix, distortion)[0].reshape((-1, 2))
-        rotation = cv2.Rodrigues(np.asarray(current.rvec, np.float64))[0]
-        depths = (np.einsum('ni,ji->nj', xyz, rotation) + np.asarray(current.tvec).reshape(3))[:, 2]
-        height, width = gray.shape
-        residual = np.linalg.norm(projected-points, axis=1)
-        residual_limit = min(4., self.global_localizer.ransac_threshold)
-        valid = ((status.reshape(-1) != 0) & (back_status.reshape(-1) != 0)
-            & np.isfinite(points).all(axis=1) & np.isfinite(projected).all(axis=1)
-            & np.isfinite(xyz).all(axis=1)
-            & (fb_error <= self.tracker.forward_backward_error)
-            & (residual <= residual_limit)
-            & (depths > 0) & (points[:, 0] >= 0) & (points[:, 0] < width)
-            & (points[:, 1] >= 0) & (points[:, 1] < height))
-        detail.update(projected_valid=int(valid.sum()),
-                      residual_limit_px=residual_limit,
-            residual_rejected=int((flow_valid & np.isfinite(residual) &
-                (residual > residual_limit)).sum()),
-            depth_rejected=int((flow_valid & (depths <= 0)).sum()),
-            track_points_before=len(current.image_points))
-        existing_uv = np.asarray(current.image_points, np.float64)
-        existing_xyz = np.asarray(current.object_points, np.float64)
-        detail.update(duplicate_existing=0, duplicate_new=0)
-        additions_uv, additions_xyz = [], []
-        eligible = np.flatnonzero(valid)
-        # Give newly appearing regions a chance, rather than spending all 80
-        # additions on the lowest-error cluster on the old face.
-        from guided_matching import replenishment_indices
-        ordered = replenishment_indices(points[eligible], -residual[eligible], existing_uv)
-        for index in eligible[ordered]:
-            uv, point = points[index], xyz[index]
-            if (np.any(np.linalg.norm(existing_uv-uv, axis=1) < 6.) or
-                np.any(np.linalg.norm(existing_xyz-point, axis=1) < 4.)):
-                detail['duplicate_existing'] += 1
-                continue
-            if additions_uv and (np.any(np.linalg.norm(np.asarray(additions_uv)-uv, axis=1) < 6.)
-                                 or np.any(np.linalg.norm(np.asarray(additions_xyz)-point, axis=1) < 4.)):
-                detail['duplicate_new'] += 1
-                continue
-            additions_uv.append(uv)
-            additions_xyz.append(point)
-            if len(additions_uv) >= 80:
-                break
-        if len(additions_uv) < 4:
-            detail.update(unique_additions=len(additions_uv),
-                reason='too_few_unique_additions' if valid.any() else 'current_projection_or_flow_rejected')
-            # A changed view may independently confirm already tracked points
-            # without adding new XYZs. Count that verified refresh as the new
-            # angle anchor, otherwise the same rotation triggers forever.
-            if valid.sum() >= getattr(self.global_localizer, 'min_inliers', 10):
-                quality = self.global_localizer.validate_pose(
-                    xyz[valid], points[valid], current.rvec, current.tvec,
-                    list(range(int(valid.sum()))), image.shape, camera_matrix, distortion)
-                if quality['passed']:
-                    detail['reason'] = 'existing_points_verified'
-                    self.last_refresh_verified = True
-                    if current is not self.tracker.seed:
-                        self.tracker.seed = TrackingSeed(gray.copy(), existing_uv.copy(),
-                            existing_xyz.copy(), current.rvec.copy(), current.tvec.copy())
-                    self.last_refresh_refinement['committed'] = self.last_refresh_refinement.get('accepted', False)
-                    self.replenish_anchor = SimpleNamespace(
-                        rvec=current.rvec.copy(), tvec=current.tvec.copy())
-                else:
-                    detail.update(reason='fresh_points_qc_rejected', quality=quality)
+        from replenishment_refinement import select_pose
+        fresh = TrackingSeed(gray, points[flow_valid], xyz[flow_valid], candidate.rvec, candidate.tvec)
+        updated, decision, self.last_refresh_pool = select_pose(current, fresh,
+            image.shape, camera_matrix, distortion, self.global_localizer,
+            iterations=self.tracker.tracking_iterations)
+        self.last_refresh_refinement = decision
+        detail.update(reason=decision['reason'], common_points=decision['common_points'],
+            duplicates=decision['duplicates'], track_points_before=len(current.image_points))
+        if updated is None:
             return 0
-        combined_uv = np.vstack((existing_uv, additions_uv))
-        combined_xyz = np.vstack((existing_xyz, additions_xyz))
-        retained_additions = len(additions_uv)
-        if len(combined_uv) > 2000:
-            # Continuous refresh must not grow LK workload without bound.
-            projected_all = cv2.projectPoints(combined_xyz, current.rvec, current.tvec,
-                                              camera_matrix, distortion)[0].reshape(-1, 2)
-            errors = np.linalg.norm(projected_all-combined_uv, axis=1)
-            keep = spatial_indices(combined_uv, -errors, 2000)
-            retained_additions = int(np.sum(keep >= len(existing_uv)))
-            combined_uv, combined_xyz = combined_uv[keep], combined_xyz[keep]
-        quality = self.global_localizer.validate_pose(
-            combined_xyz, combined_uv, current.rvec, current.tvec,
-            list(range(len(combined_uv))), image.shape, camera_matrix, distortion)
-        if not quality['passed']:
-            detail.update(reason='combined_points_qc_rejected', quality=quality,
-                          unique_additions=len(additions_uv))
-            return 0
+        self.tracker.seed = updated
         self.last_refresh_verified = True
-        self.tracker.seed = TrackingSeed(gray.copy(), combined_uv, combined_xyz,
-                                         current.rvec.copy(), current.tvec.copy())
-        self.last_refresh_refinement['committed'] = self.last_refresh_refinement.get('accepted', False)
-        detail.update(reason='added', added=retained_additions, unique_additions=len(additions_uv),
-                      track_points_after=len(combined_uv), quality=quality)
+        self.last_refresh_refinement['committed'] = True
+        self.replenish_anchor = SimpleNamespace(rvec=updated.rvec.copy(), tvec=updated.tvec.copy())
+        detail.update(reason='common_support_update', operation='common_pool', committed=True,
+            added=decision['added'], track_points_after=len(updated.image_points),
+            quality=decision['quality'])
         from guided_matching import region_counts
-        box = (0,0,gray.shape[1],gray.shape[0])
-        detail['regions'] = dict(grid=4,bbox=list(box),
-            before=region_counts(existing_uv,box), after=region_counts(combined_uv,box),
-            proposed_additions=region_counts(additions_uv,box))
-        return retained_additions
+        box = (0, 0, gray.shape[1], gray.shape[0])
+        detail['regions'] = dict(grid=4, bbox=list(box),
+            before=region_counts(current.image_points, box),
+            after=region_counts(updated.image_points, box),
+            proposed_additions=region_counts(points[flow_valid], box))
+        return decision['added']
 
     def _recover_recent_track(self, image, camera_matrix, distortion):
         recovery = getattr(self, 'short_recovery', None)
@@ -858,29 +789,31 @@ class AsyncTemporalGLBLocalizer:
                         refresh_started = time.perf_counter()
                         self.last_replenished = self._replenish_current_seed(
                             self.pending_seed, image, camera_matrix, distortion)
-                        if getattr(self, 'last_refresh_refinement', {}).get('conflict'):
-                            # Independent, strong current matches contradict
-                            # the old track. Neither pose may drive the overlay.
-                            conflict = self.last_refresh_refinement.copy()
-                            self._diagnostic('replenishment', added=0,
-                                diagnostics=getattr(self, 'last_replenish_diagnostics', {}),
-                                refinement=conflict)
-                            self.reset_tracking()
-                            self.last_refresh_refinement = conflict
-                            self.last_track_failure = 'fresh_pose_conflict'
-                            self.record_capture(image, camera_matrix, distortion, time.monotonic())
-                            self._submit(image, camera_matrix, distortion)
-                            return LiveResult('FAIL', 'FRESH_POSE_CONFLICT', 0, 0, 0, 0.,
-                                None, None, None, None,
-                                (time.perf_counter()-refresh_started)*1000, 'HIDDEN'), image.copy()
                         if self.last_replenished or getattr(self, 'last_refresh_refinement', {}).get('committed'):
                             # Publish the merged points and current PnP together,
                             # never the pre-merge debug/counts from this frame.
                             refreshed = self.tracker._track(image, camera_matrix, distortion)
+                            if refreshed is not None and getattr(self, 'last_refresh_pool', None) is not None:
+                                from replenishment_refinement import final_pose_check
+                                accepted, final_decision = final_pose_check(self.tracker.seed,
+                                    self.last_refresh_pool, image.shape, camera_matrix,
+                                    distortion, self.global_localizer)
+                                self.last_replenish_diagnostics['final_common_decision'] = final_decision
+                                if not accepted:
+                                    refreshed = None
+                                else:
+                                    self.last_replenished = final_decision['added']
+                                    self.last_refresh_refinement.update(added=self.last_replenished,
+                                        retained_old=final_decision['retained_old'])
+                                    self.last_replenish_diagnostics['added'] = self.last_replenished
                             if refreshed is not None:
                                 elapsed = (time.perf_counter()-refresh_started)*1000
                                 refined = getattr(self, 'last_refresh_refinement', {}).get('committed')
-                                tracked = (replace(refreshed[0], detail='TRACKING_REFINED' if refined else 'TRACKING_REPLENISHED',
+                                reinitialized = getattr(self, 'last_refresh_refinement', {}).get('reinitialized', False)
+                                if getattr(self, 'last_refresh_pool', None) is not None:
+                                    self.active_reference_name = self.pending_reference_name
+                                    self.last_refresh_refinement['new_points'] = len(self.tracker.seed.image_points)
+                                tracked = (replace(refreshed[0], detail='TRACKING_REINITIALIZED' if reinitialized else 'TRACKING_REFINED' if refined else 'TRACKING_REPLENISHED',
                                     processing_ms=tracked[0].processing_ms+elapsed), refreshed[1])
                                 self.last_replenish_diagnostics.update(final_current_frame_qc=True,
                                     track_points_after_final_pnp=len(self.tracker.seed.image_points))
@@ -888,12 +821,14 @@ class AsyncTemporalGLBLocalizer:
                                 self.tracker.seed, self.tracker.last_debug = before_refresh, before_debug
                                 self.replenish_anchor = before_anchor
                                 self.global_localizer.last_tracking_quality = before_quality
-                                self.last_refresh_refinement['committed'] = False
-                                self.last_refresh_refinement['reason'] = 'final_current_frame_qc'
+                                self.last_refresh_refinement.update(committed=False,
+                                    reason='final_current_frame_qc',
+                                    attempted_added=self.last_refresh_refinement.get('added', 0), added=0)
                                 self.last_refresh_verified = False
                                 attempted = self.last_replenished
                                 self.last_replenished = 0
                                 self.last_replenish_diagnostics.update(added=0, attempted_added=attempted,
+                                    replaced_points=0,
                                     reason='final_current_frame_qc', committed=False,
                                     final_current_frame_qc=False,
                                     track_points_after=len(before_refresh.image_points))
@@ -910,7 +845,9 @@ class AsyncTemporalGLBLocalizer:
                                   f'{len(self.tracker.seed.image_points)} tracked')
                     if background:
                         if self.last_refresh_verified:
-                            self.background_refresh.accepted(self.last_replenished)
+                            self.background_refresh.accepted(self.last_replenished,
+                                replaced=bool(getattr(self, 'last_refresh_refinement', {}).get('committed') and
+                                              self.last_refresh_refinement.get('reinitialized')))
                             if self.pending_mode == 'global':
                                 self.tracker.frames_since_global = 0
                         else:
@@ -918,6 +855,7 @@ class AsyncTemporalGLBLocalizer:
                 self.pending_seed = None
                 self.pending_mode = None
                 self.pending_reference_name = None
+                self.last_refresh_pool = None
                 if getattr(self, 'search_frame_buffer', None) is not None:
                     self.search_frame_buffer.mark_pose(self.tracker.seed,
                         getattr(self.global_localizer, 'manifest', {}).get('bounds'))
@@ -1149,6 +1087,7 @@ class AsyncTemporalGLBLocalizer:
         if getattr(self, 'short_recovery', None) is not None:
             self.short_recovery.clear()
         self.last_refresh_refinement = {}
+        self.last_refresh_pool = None
         self.coarse_reference_name = None
         if getattr(self, 'replenish_mode', '') == 'background':
             from background_refresh import BackgroundRefresh

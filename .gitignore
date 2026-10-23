@@ -1,4 +1,6 @@
 .DS_Store
+ViewSyncBuilder/.venv/
+ViewSyncBuilder/**/__pycache__/
 MacAR/output_map_preprocessing/
 MacAR/registered_map_selection.json
 **/.DS_Store

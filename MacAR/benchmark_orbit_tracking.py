@@ -71,7 +71,6 @@ def replay(folder, output, fps, occlusion, baseline=False):
         actor = build_localizer(args)
         if baseline:
             actor.short_recovery = None
-            actor.refine_refresh_pose = False
             actor.resilient_transport = False
             actor.background_refresh.fast_recovery = False
             # Preserve previous scheduling for a paired comparison.

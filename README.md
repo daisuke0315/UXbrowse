@@ -9,7 +9,7 @@ CT断面画像（MPR）と可視光3Dモデルを、ブラウザ上で重ねて�
 - MPRより手前のモデルを透過し、外観と内部構造の位置関係を確認できます。
 - DICOM・MHA・GLB・OBJをブラウザ内で読み込みます。
 - 読み込んだデータを外部サーバーへ送信しません。
-- 本リポジトリは、あらかじめ整合されたCTと3Dモデルを観察するビューアです。CTとモデルの位置合わせ処理自体は含みません。
+- ブラウザビューア本体は、あらかじめ整合されたCTと3Dモデルを観察します。生成・CT拘束最適化は別アプリの[ViewSync Builder（開発中）](ViewSyncBuilder/README.md)で扱います。
 
 ## オンラインデモ
 
@@ -97,6 +97,7 @@ tools/start_dicom_viewer.command /path/to/dicom-folder
 
 ## 技術資料
 
+- [ViewSync Builder：CT-GCP拘束フォトグラメトリ（開発中）](ViewSyncBuilder/README.md)
 - [プロジェクト概要](docs/project-overview.md)
 - [設計判断](docs/architecture-decisions.md)
 - [研究・開発状況](docs/research-status.md)

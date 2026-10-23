@@ -119,6 +119,13 @@ class RefreshPolicyTests(unittest.TestCase):
         self.assertEqual(policy.decide(.21,busy=False,
             weak_reasons=['view_direction_emerging','image_coverage']), 'guided')
 
+    def test_reinitialization_is_not_counted_as_added_correspondences(self):
+        policy=BackgroundRefresh()
+        policy.accepted(replaced=True)
+        self.assertEqual(policy.added_total,0)
+        self.assertEqual(policy.outcome,'reinitialized')
+        self.assertEqual(policy.snapshot()['reinitializations'],1)
+
 
 from tests.runtime_dataset import RuntimeDataset
 
@@ -213,6 +220,100 @@ class BackgroundPipelineTests(RuntimeDataset, unittest.TestCase):
         self.assertEqual(loc.last_replenish_diagnostics['added'],0)
         self.assertEqual(loc.last_replenish_diagnostics['reason'],'final_current_frame_qc')
 
+    def replacement_fixture(self):
+        from pose_quality import assess_pose
+        loc,_=self.fixture()
+        rng=np.random.default_rng(17)
+        xyz=rng.uniform([-100,-70,400],[100,70,600],(80,3))
+        matrix=np.array([[500.,0,320.],[0,500.,240.],[0,0,1.]])
+        image=np.zeros((480,640,3),np.uint8)
+        points=cv2.projectPoints(xyz,np.zeros(3),np.zeros(3),matrix,None)[0].reshape(-1,2)
+        old_t=np.array([-120.,0.,0.])
+        old_uv=cv2.projectPoints(xyz[:13],np.zeros(3),old_t,matrix,None)[0].reshape(-1,2)
+        loc.tracker.seed=TrackingSeed(image[:,:,0],old_uv,xyz[:13],np.zeros(3),old_t)
+        candidate=TrackingSeed(image[:,:,0],points,xyz,np.zeros(3),np.zeros(3))
+        loc.tracker.flow_window=21;loc.tracker.flow_levels=3
+        loc.tracker.forward_backward_error=1.5;loc.tracker.tracking_iterations=200
+        loc.global_localizer.ransac_threshold=4.
+        loc.global_localizer.max_reprojection_error=3.
+        loc.global_localizer.validate_pose=lambda xyz,uv,r,t,ids,shape,k,d:assess_pose(
+            xyz,uv,r,t,ids,shape,k,d,10,.2,3.,max_p95_error=4.5)
+        loc.last_search_diagnostics=dict(reference_matching='pose_references')
+        return loc,image,matrix,candidate
+
+    def test_real_current_common_pnp_corrects_drifted_thirteen_point_track(self):
+        loc,image,matrix,candidate=self.replacement_fixture()
+        def flow(before,after,p,_,**kw):return p.copy(),np.ones((len(p),1),np.uint8),None
+        with patch('glb_virtual_live.cv2.calcOpticalFlowPyrLK',side_effect=flow):
+            added=loc._replenish_current_seed(candidate,image,matrix,None)
+        self.assertEqual(added,loc.last_refresh_refinement['added'])
+        self.assertGreater(added,50)  # Only genuinely new XYZs, not all selected observations.
+        self.assertGreater(len(loc.tracker.seed.image_points),65)
+        self.assertLess(np.linalg.norm(loc.tracker.seed.tvec),.01)
+        self.assertTrue(loc.last_refresh_refinement['committed'])
+        self.assertEqual(loc.last_replenish_diagnostics['operation'],'common_pool')
+
+    def test_replacement_final_current_qc_failure_restores_old_track(self):
+        loc,image,matrix,candidate=self.replacement_fixture()
+        old=loc.tracker.seed
+        loc.pending_seed=candidate;loc.pending_mode='guided';loc.pending_reference_name='new.png'
+        first=loc.tracker._track.return_value
+        loc.tracker._track.side_effect=[first,None]
+        def flow(before,after,p,_,**kw):return p.copy(),np.ones((len(p),1),np.uint8),None
+        with patch('glb_virtual_live.cv2.calcOpticalFlowPyrLK',side_effect=flow):
+            result,_=loc.localize(image,matrix,None)
+        self.assertIs(loc.tracker.seed,old)
+        self.assertEqual(loc.active_reference_name,'old.png')
+        self.assertFalse(loc.last_refresh_refinement['committed'])
+        self.assertEqual(loc.last_refresh_refinement['added'],0)
+        self.assertEqual(loc.background_refresh.snapshot()['reinitializations'],0)
+
+    def test_successful_replacement_publishes_new_pose_reference_and_counter(self):
+        loc,image,matrix,candidate=self.replacement_fixture()
+        loc.pending_seed=candidate;loc.pending_mode='guided';loc.pending_reference_name='new.png'
+        first=loc.tracker._track.return_value
+        def track(*args):
+            seed=loc.tracker.seed
+            loc.global_localizer.last_tracking_quality=loc.global_localizer.validate_pose(
+                seed.object_points,seed.image_points,seed.rvec,seed.tvec,
+                np.arange(len(seed.image_points)),image.shape,matrix,None)
+            return replace(first[0],rvec=tuple(seed.rvec.ravel()),tvec=tuple(seed.tvec.ravel()),
+                matches=len(seed.image_points),inliers=len(seed.image_points)),image
+        loc.tracker._track.side_effect=track
+        def flow(before,after,p,_,**kw):return p.copy(),np.ones((len(p),1),np.uint8),None
+        with patch('glb_virtual_live.cv2.calcOpticalFlowPyrLK',side_effect=flow):
+            result,_=loc.localize(image,matrix,None)
+        self.assertEqual(result.detail,'TRACKING_REINITIALIZED')
+        self.assertEqual(result.inliers,len(loc.tracker.seed.image_points))
+        self.assertGreater(result.inliers,65)
+        self.assertLess(np.linalg.norm(result.tvec),.01)
+        self.assertEqual(loc.active_reference_name,'new.png')
+        self.assertEqual(loc.background_refresh.reinitializations,1)
+        self.assertEqual(loc.background_refresh.added_total,loc.last_replenished)
+        self.assertLess(loc.last_replenished,result.inliers)
+
+    def test_final_pnp_point_loss_cannot_publish_a_weak_replacement(self):
+        loc,image,matrix,candidate=self.replacement_fixture()
+        old=loc.tracker.seed
+        loc.pending_seed=candidate;loc.pending_mode='guided';loc.pending_reference_name='new.png'
+        first=loc.tracker._track.return_value
+        def track(*args):
+            seed=loc.tracker.seed
+            if seed is not old:
+                seed=replace(seed,image_points=seed.image_points[:4],object_points=seed.object_points[:4])
+                loc.tracker.seed=seed
+                loc.global_localizer.last_tracking_quality=loc.global_localizer.validate_pose(
+                    seed.object_points,seed.image_points,seed.rvec,seed.tvec,
+                    np.arange(4),image.shape,matrix,None)
+            return first
+        loc.tracker._track.side_effect=track
+        def flow(before,after,p,_,**kw):return p.copy(),np.ones((len(p),1),np.uint8),None
+        with patch('glb_virtual_live.cv2.calcOpticalFlowPyrLK',side_effect=flow):
+            loc.localize(image,matrix,None)
+        self.assertIs(loc.tracker.seed,old)
+        self.assertEqual(loc.active_reference_name,'old.png')
+        self.assertEqual(loc.background_refresh.reinitializations,0)
+
     def test_strict_refresh_accepts_three_pixel_support_only_after_combined_qc(self):
         loc,_=self.fixture()
         uv=np.array([[x,y] for x in (10.,30.,50.,70.) for y in (10.,30.,50.)])
@@ -220,19 +321,22 @@ class BackgroundPipelineTests(RuntimeDataset, unittest.TestCase):
         gray=np.zeros((100,100),np.uint8)
         loc.tracker.seed=TrackingSeed(gray,uv,xyz,np.zeros(3),np.zeros(3))
         loc.tracker.flow_window=21;loc.tracker.flow_levels=3;loc.tracker.forward_backward_error=1.5
+        loc.tracker.tracking_iterations=150
         loc.global_localizer.ransac_threshold=4.
         additions=np.array([[20.,20.],[40.,20.],[60.,20.],[80.,20.]])
         candidate=TrackingSeed(gray,additions+[3.,0.],
             np.column_stack((additions,np.full(4,100.))),np.zeros(3),np.zeros(3))
-        loc.global_localizer.validate_pose=Mock(return_value={'passed':True})
+        from pose_quality import assess_pose
+        loc.global_localizer.validate_pose=Mock(side_effect=lambda xyz,uv,r,t,ids,shape,k,d:
+            assess_pose(xyz,uv,r,t,ids,shape,k,d,10,.2,3.,max_p95_error=4.5))
         def flow(a,b,p,_,**kwargs):return p.copy(),np.ones((len(p),1),np.uint8),None
         with patch('glb_virtual_live.cv2.calcOpticalFlowPyrLK',side_effect=flow):
             added=loc._replenish_current_seed(candidate,np.zeros((100,100,3),np.uint8),np.diag([100.,100.,1.]),None)
         self.assertEqual(added,4)
-        self.assertEqual(loc.last_replenish_diagnostics['residual_limit_px'],4.)
-        self.assertEqual(loc.last_replenish_diagnostics['residual_rejected'],0)
-        loc.global_localizer.validate_pose.assert_called_once()
+        self.assertTrue(loc.last_refresh_refinement['quality']['passed'])
+        self.assertLessEqual(loc.last_refresh_refinement['quality']['mean_error'],3.)
         before=loc.tracker.seed
+        loc.global_localizer.validate_pose.side_effect=None
         loc.global_localizer.validate_pose.return_value={'passed':False}
         candidate=replace(candidate,image_points=candidate.image_points+[0.,10.],
             object_points=candidate.object_points+[0.,10.,0.])
@@ -348,30 +452,39 @@ class BackgroundPipelineTests(RuntimeDataset, unittest.TestCase):
         loc._replenish_current_seed.assert_called_once()
         self.assertEqual(loc.background_refresh.outcome,'current_frame_qc_rejected')
 
-    def test_strong_pose_conflict_hides_overlay_clears_anchor_and_starts_global_search(self):
-        from tracking_recovery import ShortTrackRecovery
-        loc,image=self.fixture()
-        loc.short_recovery=ShortTrackRecovery()
-        loc.short_recovery.remember(loc.tracker.seed,'old.png',np.eye(3),None,1.)
-        loc.pending_seed=loc.tracker.seed
-        loc.pending_mode='guided'
-        def conflict(*_):
-            loc.last_refresh_refinement=dict(accepted=False,conflict=True,reason='large_pose_change')
-            return 0
-        loc._replenish_current_seed=Mock(side_effect=conflict)
-        result,canvas=loc.localize(image,np.eye(3),None)
-        self.assertEqual(result.status,'FAIL')
-        self.assertEqual(result.detail,'FRESH_POSE_CONFLICT')
-        self.assertEqual(result.mpr_status,'HIDDEN')
-        self.assertIsNone(result.rvec)
-        self.assertIsNone(loc.tracker.seed)
-        self.assertIsNone(loc.short_recovery.seed)
+    def test_incompatible_replenishment_poses_do_not_reset_a_valid_live_track(self):
+        loc,image,matrix,_=self.replacement_fixture()
+        rng=np.random.default_rng(62)
+        xyz=rng.uniform([-100,-70,400],[100,70,600],(110,3))
+        gray=cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+        def seed(points,shift):
+            t=np.array([shift,0.,0.])
+            uv=cv2.projectPoints(points,np.zeros(3),t,matrix,None)[0].reshape(-1,2)
+            return TrackingSeed(gray,uv,points,np.zeros(3),t)
+        old,fresh=seed(xyz[:60],-60.),seed(xyz[60:],60.)
+        fresh=replace(fresh,image_points=np.vstack((fresh.image_points,old.image_points[:4])),
+                      object_points=np.vstack((fresh.object_points,old.object_points[:4])))
+        loc.tracker.seed=old
+        loc.pending_seed=fresh;loc.pending_mode='guided';loc.pending_reference_name='new.png'
+        loc.reset_tracking=Mock(wraps=loc.reset_tracking)
+        first=loc.tracker._track.return_value[0]
+        def track(*_):
+            current=loc.tracker.seed
+            return replace(first,inliers=len(current.image_points),
+                           rvec=tuple(current.rvec),tvec=tuple(current.tvec)),image
+        loc.tracker._track.side_effect=track
+        def flow(a,b,p,_,**kw):return p.copy(),np.ones((len(p),1),np.uint8),None
+        with patch('glb_virtual_live.cv2.calcOpticalFlowPyrLK',side_effect=flow):
+            result,_=loc.localize(image,matrix,None)
+        self.assertEqual(result.status,'PASS')
+        self.assertEqual(result.detail,'TRACKING_REFINED')
+        self.assertIsNotNone(loc.tracker.seed)
+        self.assertTrue(loc.last_refresh_refinement['committed'])
+        self.assertTrue(loc.last_replenish_diagnostics['final_current_frame_qc'])
+        loc.reset_tracking.assert_not_called()
         self.assertIsNone(loc.pending_seed)
-        self.assertTrue(loc.last_refresh_refinement['conflict'])
-        self.assertEqual(loc.last_track_failure,'fresh_pose_conflict')
-        loc._submit.assert_called_once()
-        self.assertEqual(loc._submit.call_args.kwargs,{})
-        np.testing.assert_array_equal(canvas,image)
+        self.assertTrue(all(call.kwargs.get('pose_prior') is not None
+                            for call in loc._submit.call_args_list))
 
     def test_verified_duplicate_refresh_counts_as_verified_not_added(self):
         loc,image=self.fixture()
@@ -467,8 +580,11 @@ class BackgroundPipelineTests(RuntimeDataset, unittest.TestCase):
         gray=np.zeros((640,640),np.uint8)
         loc.tracker.seed=TrackingSeed(gray,uv,xyz(uv),np.zeros(3),np.zeros(3))
         loc.tracker.flow_window=21;loc.tracker.flow_levels=3;loc.tracker.forward_backward_error=1.5
+        loc.tracker.tracking_iterations=150
         loc.global_localizer.ransac_threshold=8.
-        loc.global_localizer.validate_pose=Mock(return_value={'passed':True})
+        from pose_quality import assess_pose
+        loc.global_localizer.validate_pose=lambda xyz,uv,r,t,ids,shape,k,d:assess_pose(
+            xyz,uv,r,t,ids,shape,k,d,10,.2,3.,max_p95_error=4.5)
         additions=uv[:80]+7.
         candidate=TrackingSeed(gray,additions,xyz(additions),np.zeros(3),np.zeros(3))
         def flow(before,after,p,_unused,**kwargs):

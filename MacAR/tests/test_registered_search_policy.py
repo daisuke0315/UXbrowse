@@ -14,15 +14,17 @@ from registered_aliked_live import RegisteredALIKEDLiveLocalizer, reference_exit
 from spatial_pose_scoring import spatial_pose_score
 
 
-def hypothesis(name='a', count=36, mean=1., offset=0., rotation=0., passed=True):
-    uv = np.array([(x, y) for x in np.linspace(5, 95, 6)
-                   for y in np.linspace(5, 95, 6)], np.float32)
+def hypothesis(name='a', count=36, mean=1., offset=0., rotation=0., passed=True, samples=36):
+    side=int(np.ceil(np.sqrt(samples)))
+    uv = np.array([(x, y) for x in np.linspace(5, 95, side)
+                   for y in np.linspace(5, 95, side)], np.float32)[:samples]
     transfers = [SimpleNamespace(query_uv=tuple(p), xyz=(float(p[0])*1000., float(p[1])*1000., 0.)) for p in uv]
     pose = SimpleNamespace(rvec=np.array([0., 0., rotation]),
                            tvec=np.array([offset, 0., 1000.]),
                            inlier_indices=np.arange(count), mean_error=mean)
     quality = dict(passed=passed, reasons=[] if passed else ['few_inliers'],
-                   inlier_ratio=count/36, mean_error=mean, p95_error=mean+1., spread_3d=.5)
+                   inlier_ratio=count/samples, mean_error=mean, p95_error=mean+1., spread_3d=.5,
+                   coverage=.81)
     quality['spatial_score'] = spatial_pose_score(uv[:count], np.full(count, mean),
                                                 (0, 0, 100, 100), 4.)
     return pose, transfers, quality, name, 0.
@@ -81,7 +83,8 @@ class RegisteredSearchPolicyTests(RuntimeDataset, unittest.TestCase):
         self.assertEqual(actual['reason'], 'competing_pose')
 
     def run_search(self, policy='adaptive', qualities=None, validation=False, weak_first=False,
-                   dense_first=False, conflicting_sparse=False, default_selection=False):
+                   dense_first=False, conflicting_sparse=False, default_selection=False,
+                   context=False, support=36):
         try:
             import torch
         except ImportError:
@@ -96,18 +99,19 @@ class RegisteredSearchPolicyTests(RuntimeDataset, unittest.TestCase):
         engine.iterations, engine.min_inliers = 10000, 10
         engine.min_inlier_ratio, engine.max_reprojection_error = .2, 3.
         engine.max_coarse_rotation_deg, engine.mpr_renderer = 55., None
+        engine.map_data=SimpleNamespace(xyz=np.array([[-100.,-100.,0.],[100.,100.,100.]]))
         engine.views = [dict(image_name=f'v{i}.png', world_to_camera=np.eye(4)) for i in range(3)]
         engine.retriever = SimpleNamespace(rank_debug=Mock(return_value=(
             [(1., 0., i) for i in range(3)], 0, [], dict(bbox=(0, 0, 1, 1)))))
         engine.diagnostic_sink = Mock()
-        h = hypothesis()
+        h = hypothesis(count=support,samples=support)
         uv = np.array([t.query_uv for t in h[1]], np.float32)
         if dense_first:
             uv[:20] = (5., 5.)
             h[1][:20] = [SimpleNamespace(query_uv=(5., 5.), xyz=(5000., 5000., 0.))
                          for _ in range(20)]
         features = dict(keypoints=torch.tensor(uv[None]), image_size=torch.tensor([[100., 100.]]))
-        engine._reference = Mock(return_value=(features, np.arange(36),
+        engine._reference = Mock(return_value=(features, np.arange(support),
             np.array([t.xyz for t in h[1]], np.float64)))
         engine.validate_pose = Mock(side_effect=qualities if qualities else
                                     lambda *a: copy.deepcopy(h[2]))
@@ -118,6 +122,8 @@ class RegisteredSearchPolicyTests(RuntimeDataset, unittest.TestCase):
             engine._appearance_references = Mock(return_value=references)
         if validation:
             workspace['validation_pose'] = (np.zeros(3), np.zeros(3))
+        if context:
+            workspace['pose_prior']=(np.zeros(3),np.array([-120.,0.,1000.]))
         image = np.zeros((100, 100, 3), np.uint8)
         poses = [hypothesis(count=10)[0] if weak_first and n == 0 else h[0] for n in range(6)]
         if dense_first:
@@ -131,14 +137,29 @@ class RegisteredSearchPolicyTests(RuntimeDataset, unittest.TestCase):
              patch('registered_aliked_live._image_tensor', return_value=None), \
              patch('registered_aliked_live._extract', return_value=features) as extract, \
              patch('registered_aliked_live._match_pair', return_value=(uv, uv,
-                 np.column_stack((np.arange(36), np.arange(36))), np.linspace(1., .5, 36))) as matcher, \
-             patch('registered_aliked_live.cv2.findFundamentalMat', return_value=(np.eye(3), np.ones((36, 1)))), \
+                 np.column_stack((np.arange(support), np.arange(support))), np.linspace(1., .5, support))) as matcher, \
+             patch('registered_aliked_live.cv2.findFundamentalMat', return_value=(np.eye(3), np.ones((support, 1)))), \
              patch('registered_aliked_live.solve_pose', side_effect=poses):
             result, _ = engine._localize_once(image, np.eye(3), np.zeros(5), workspace=workspace)
             self.assertEqual(extract.call_count, 1)
             self.assertEqual(engine.retriever.rank_debug.call_count, 1)
             self.assertEqual(matcher.call_count, engine._reference.call_count)
         return engine, result
+
+    def test_context_leaves_old_pose_difference_for_current_common_pool_arbitration(self):
+        for support in (36,64):
+            engine,result=self.run_search(context=True,support=support)
+            self.assertEqual(result.status,'PASS')
+            comparison=engine.last_diagnostics['quality']['pose_comparison']
+            self.assertGreater(comparison['center_distance'],0.)
+            self.assertNotIn('mismatch',comparison)
+            self.assertNotIn('pose_prior_mismatch',result.detail)
+
+    def test_context_does_not_override_normal_source_qc(self):
+        engine,result=self.run_search(context=True,support=36,
+            qualities=[dict(hypothesis()[2],passed=False,reasons=['reprojection_error']) for _ in range(6)])
+        self.assertEqual(result.status,'FAIL')
+        self.assertIn('reprojection_error',result.detail)
 
     def test_default_search_uses_appearance_photos_not_angle_shortlist(self):
         engine, result = self.run_search(default_selection=True)

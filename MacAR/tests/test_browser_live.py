@@ -575,7 +575,8 @@ class BrowserTests(RuntimeDataset, unittest.TestCase):
             early:searchSummary({active:false,stage:'done',matching_method:'lightglue',reference_search:{processed:2,total:6,skipped:4,early_exit:true,policy:'adaptive'}}),
             full:searchSummary({active:true,stage:'qc',matching_method:'lightglue',reference_search:{processed:6,total:6,skipped:0,early_exit:false,policy:'exhaustive'}}),
             appearance:searchSummary({active:true,stage:'reference',reference_selection:'gs-real',appearance_cache:'building',appearance_loaded:25,appearance_total:620}),
-            conflict:backgroundSummary({background:{state:'running',reason:'tracking_lost'},refinement:{conflict:true}}),
+            replacement:backgroundSummary({background:{state:'cooldown',outcome:'reinitialized',last_added:0,added_total:8,reinitializations:1,failures:0,tracking_ms:5,search_ms:400},refinement:{committed:true,reinitialized:true,method:'common_pool',selected:'fresh',old_points:13,new_points:80}}),
+            common:backgroundSummary({background:{state:'cooldown',outcome:'added',last_added:20,added_total:28,failures:0,tracking_ms:5,search_ms:400},refinement:{committed:true,method:'common_pool',selected:'joint',old_points:80,new_points:100}}),
             emerging:backgroundSummary({background:{state:'running',reason:'view_direction_emerging'}}),
             freshWait:imageQualitySummary({image_selection:{waiting:true,max_age_ms:100}}),
             waiting:searchSummary({active:false,tracking:false,background:{state:'cooldown'},stage:'done',candidate_total:3,query_features:2000}),
@@ -600,7 +601,12 @@ class BrowserTests(RuntimeDataset, unittest.TestCase):
         self.assertIn('全候補照合',packet['full']['detail'])
         self.assertIn('実写の見た目',packet['appearance']['detail'])
         self.assertIn('25/620',packet['appearance']['detail'])
-        self.assertIn('重畳を停止',packet['conflict'])
+        self.assertIn('追跡を再初期化',packet['replacement'])
+        self.assertIn('13→80点',packet['replacement'])
+        self.assertNotIn('NaN',packet['replacement'])
+        self.assertIn('新旧共通の点で姿勢更新',packet['common'])
+        self.assertIn('80→100点',packet['common'])
+        self.assertNotIn('NaN',packet['common'])
         self.assertIn('新しい面へ先行補充',packet['emerging'])
         self.assertIn('100 ms',packet['freshWait'])
         self.assertFalse(packet['idle']['active'])
